@@ -1,6 +1,6 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
 
-import { EditTaskScreen } from '@/features/task-form';
+import { EditTaskScreen } from '@/features/task-editor';
 
 export default function EditTaskRoute() {
   const { id } = useLocalSearchParams<{ id: string }>();

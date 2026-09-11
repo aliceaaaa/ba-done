@@ -66,8 +66,10 @@ A task is either **scheduled** or lives in the **Future** pool. The database rej
 
 ### Deck order
 
-1. `carryOver` tasks by `carryOverOrder` (shown with “Match made in heaven. Again.”).
+1. `carryOver` tasks by `carryOverOrder` (labelled “Mega Crush”; a returned task shows “Match made in heaven”).
 2. `ranked` tasks from priority 10 to 1.
+
+Future tasks never appear in the deck and never occupy a priority.
 
 ### Rules
 
@@ -84,7 +86,21 @@ A task is either **scheduled** or lives in the **Future** pool. The database rej
 - `scheduleFutureTask`: takes a task from the Future pool and places it on a day with a free ranked priority.
 - `changePriority`: sets a free ranked priority on the same day; a carried task becomes ranked.
 - `swapPriorities`: swaps two active ranked tasks of the same day atomically.
-- `completeTask` (swipe right, “Done”).
+- `completeTask` (swipe right, “Done”) and `undo` for the latest Done or Not tonight.
+- `createFutureTask`: creates a task without a date, priority or placement.
+- `moveTaskToFuture`: returns a scheduled task to the Future pool and frees its position. A reminder with a date must be turned off explicitly (`clearDatedReminder`).
+- `convertCarryOverToRanked`: gives a Mega Crush task a free ranked priority.
+- `editTask`: saves details and the placement change (`keep`, `ranked`, `future`) in one transaction, so a conflict never saves anything partially.
+- `setThingToTakeChecked`: checks an item of the things-to-take list.
+- `deleteTask`: soft delete (`deleted_at`). The task disappears from every view, its position becomes free, and its history stays in `task_events`.
+
+### Future pool
+
+Tasks without a date live in the Future pool (`/future`, opened from “Your matches”), newest first. They may keep an exact time, a day period or a day-period reminder, which take effect only after the task is scheduled. A reminder with a date is rejected for Future tasks.
+
+### Task editor
+
+One `TaskEditor` creates scheduled tasks, creates Future tasks and edits existing ones. Taken priorities are visible but disabled; the edited task's own priority stays available. Delete is available only in edit mode and asks for confirmation.
 
 ### Reminders
 

@@ -148,7 +148,35 @@ const addCompletionEvents: Migration = async (db) => {
   `);
 };
 
-export const migrations: readonly Migration[] = [createTasksSchema, addCompletionEvents];
+const addSoftDeleteAndCheckableThings: Migration = async (db) => {
+  await db.exec(`
+    ALTER TABLE tasks ADD COLUMN deleted_at TEXT;
+
+    DROP INDEX tasks_ranked_priority_unique;
+    DROP INDEX tasks_carry_over_order_unique;
+
+    CREATE UNIQUE INDEX tasks_ranked_priority_unique
+      ON tasks (scheduled_date, priority)
+      WHERE status = 'active' AND placement_type = 'ranked' AND deleted_at IS NULL;
+
+    CREATE UNIQUE INDEX tasks_carry_over_order_unique
+      ON tasks (scheduled_date, carry_over_order)
+      WHERE status = 'active' AND placement_type = 'carryOver' AND deleted_at IS NULL;
+
+    UPDATE tasks
+    SET things_to_take = (
+      SELECT json_group_array(json_object('text', value, 'checked', json('false')))
+      FROM json_each(tasks.things_to_take)
+    )
+    WHERE json_array_length(things_to_take) > 0;
+  `);
+};
+
+export const migrations: readonly Migration[] = [
+  createTasksSchema,
+  addCompletionEvents,
+  addSoftDeleteAndCheckableThings,
+];
 
 export async function migrateDatabase(
   db: SqlDatabase,

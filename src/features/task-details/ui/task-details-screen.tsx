@@ -1,6 +1,6 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState, type ReactNode } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import {
   describeTaskError,
@@ -16,9 +16,7 @@ import { TextButton } from '@/shared/ui/text-button';
 import { colors, spacing } from '@/shared/ui/theme';
 
 type DetailsState =
-  | { status: 'loading' }
-  | { status: 'missing'; message: string }
-  | { status: 'ready'; task: Task };
+  { status: 'loading' } | { status: 'missing'; message: string } | { status: 'ready'; task: Task };
 
 type TaskDetailsScreenProps = {
   taskId: string;
@@ -48,6 +46,7 @@ export function TaskDetailsScreen({ taskId }: TaskDetailsScreenProps) {
   const service = useTaskService();
   const router = useRouter();
   const [state, setState] = useState<DetailsState>({ status: 'loading' });
+  const [error, setError] = useState<string | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -67,6 +66,19 @@ export function TaskDetailsScreen({ taskId }: TaskDetailsScreenProps) {
     }, [service, taskId]),
   );
 
+  const toggleThing = useCallback(
+    async (index: number, checked: boolean) => {
+      const result = await service.setThingToTakeChecked(taskId, index, checked);
+      if (result.ok) {
+        setState({ status: 'ready', task: result.value });
+        setError(null);
+      } else {
+        setError(describeTaskError(result.error));
+      }
+    },
+    [service, taskId],
+  );
+
   if (state.status === 'loading') {
     return <View style={styles.screen} />;
   }
@@ -81,6 +93,7 @@ export function TaskDetailsScreen({ taskId }: TaskDetailsScreenProps) {
 
   const { task } = state;
   const time = taskTimeLabel(task);
+  const isFuture = task.scheduledDate === null;
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content} testID="task-details">
@@ -99,7 +112,9 @@ export function TaskDetailsScreen({ taskId }: TaskDetailsScreenProps) {
         {task.placementType === 'carryOver' ? (
           <Text style={styles.megaCrush}>{UI_STRINGS.carryOverLabel}</Text>
         ) : null}
-        {task.scheduledDate === null ? null : (
+        {task.scheduledDate === null ? (
+          <DetailRow label="Placement" value="Future" />
+        ) : (
           <DetailRow label="Date" value={formatTaskDate(task.scheduledDate)} />
         )}
         {time === null ? null : <DetailRow label="Time" value={time} />}
@@ -113,15 +128,31 @@ export function TaskDetailsScreen({ taskId }: TaskDetailsScreenProps) {
         {task.reminder === null ? null : (
           <DetailRow label="Reminder" value={formatReminder(task.reminder)} />
         )}
+        {isFuture && (time !== null || task.reminder !== null) ? (
+          <Text style={styles.hint}>Time and reminder apply once the task is scheduled.</Text>
+        ) : null}
       </View>
       {task.thingsToTake.length === 0 ? null : (
         <Section title="Things to take">
           {task.thingsToTake.map((item, index) => (
-            <Text key={`${index}:${item}`} style={styles.body}>
-              {`• ${item}`}
-            </Text>
+            <Pressable
+              key={`${index}:${item.text}`}
+              accessibilityRole="checkbox"
+              accessibilityLabel={item.text}
+              accessibilityState={{ checked: item.checked }}
+              onPress={() => void toggleThing(index, !item.checked)}
+              style={styles.thing}
+            >
+              <Text style={styles.checkbox}>{item.checked ? '☑' : '☐'}</Text>
+              <Text style={[styles.body, item.checked && styles.checked]}>{item.text}</Text>
+            </Pressable>
           ))}
         </Section>
+      )}
+      {error === null ? null : (
+        <Text accessibilityRole="alert" style={styles.error}>
+          {error}
+        </Text>
       )}
       <TextButton
         label={UI_STRINGS.edit}
@@ -180,5 +211,27 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: colors.accent,
+  },
+  hint: {
+    fontSize: 13,
+    color: colors.muted,
+  },
+  thing: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  checkbox: {
+    fontSize: 18,
+    color: colors.accent,
+  },
+  checked: {
+    color: colors.muted,
+    textDecorationLine: 'line-through',
+  },
+  error: {
+    color: colors.danger,
+    fontSize: 14,
   },
 });

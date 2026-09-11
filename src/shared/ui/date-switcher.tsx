@@ -1,17 +1,18 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { formatTaskDate } from '@/entities/task';
 import { addDays } from '@/shared/lib/local-date';
-import { TextButton } from '@/shared/ui/text-button';
-import { colors, spacing } from '@/shared/ui/theme';
+
+import { TextButton } from './text-button';
+import { colors, spacing } from './theme';
 
 type DateSwitcherProps = {
   date: string;
   today: string;
+  label: string;
   onChange: (date: string) => void;
 };
 
-export function DateSwitcher({ date, today, onChange }: DateSwitcherProps) {
+export function DateSwitcher({ date, today, label, onChange }: DateSwitcherProps) {
   return (
     <View style={styles.row}>
       <Pressable
@@ -23,7 +24,7 @@ export function DateSwitcher({ date, today, onChange }: DateSwitcherProps) {
         <Text style={styles.arrow}>‹</Text>
       </Pressable>
       <Text style={styles.date} testID="selected-date">
-        {formatTaskDate(date)}
+        {label}
       </Text>
       <Pressable
         accessibilityRole="button"

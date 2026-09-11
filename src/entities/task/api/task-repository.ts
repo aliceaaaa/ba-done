@@ -14,6 +14,7 @@ import {
   type TaskPlacement,
   type TaskReminder,
   type TaskStatus,
+  type ThingToTake,
 } from '../model/types';
 
 type TaskRow = {
@@ -86,6 +87,7 @@ export type TaskRepository = {
   insert(task: Task): Promise<void>;
   update(task: Task): Promise<void>;
   setCarryOverOrder(id: string, carryOverOrder: number): Promise<void>;
+  softDelete(id: string, deletedAt: string): Promise<void>;
 };
 
 export function isRankedPriorityUniqueViolation(error: unknown): boolean {
@@ -102,12 +104,23 @@ function isTaskStatus(value: string): value is TaskStatus {
   return (TASK_STATUSES as readonly string[]).includes(value);
 }
 
-function parseThingsToTake(raw: string, id: string): string[] {
+function isThingToTake(value: unknown): value is ThingToTake {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'text' in value &&
+    typeof value.text === 'string' &&
+    'checked' in value &&
+    typeof value.checked === 'boolean'
+  );
+}
+
+function parseThingsToTake(raw: string, id: string): ThingToTake[] {
   const parsed: unknown = JSON.parse(raw);
-  if (!Array.isArray(parsed) || !parsed.every((item): item is string => typeof item === 'string')) {
+  if (!Array.isArray(parsed) || !parsed.every(isThingToTake)) {
     throw new Error(`Task ${id} has invalid things_to_take`);
   }
-  return parsed;
+  return parsed.map((item) => ({ text: item.text, checked: item.checked }));
 }
 
 function toPlacement(row: TaskRow): TaskPlacement {
@@ -211,7 +224,9 @@ function toValues(task: Task): Record<Column, SqlValue> {
     duration_minutes: task.durationMinutes,
     address: task.address,
     travel_minutes: task.travelMinutes,
-    things_to_take: JSON.stringify(task.thingsToTake),
+    things_to_take: JSON.stringify(
+      task.thingsToTake.map((item) => ({ text: item.text, checked: item.checked })),
+    ),
     reminder_type: reminder?.type ?? null,
     reminder_local_date_time: reminder?.type === 'exact' ? reminder.localDateTime : null,
     reminder_period: reminder?.type === 'dayPeriod' ? reminder.period : null,
@@ -223,21 +238,27 @@ function toValues(task: Task): Record<Column, SqlValue> {
 }
 
 export function createTaskRepository(db: SqlExecutor): TaskRepository {
-  async function select(where: string, params: readonly SqlValue[]): Promise<Task[]> {
-    const rows = await db.all<TaskRow>(`SELECT ${SELECT_COLUMNS} FROM tasks ${where}`, params);
+  async function select(
+    condition: string,
+    params: readonly SqlValue[],
+    order = '',
+  ): Promise<Task[]> {
+    const rows = await db.all<TaskRow>(
+      `SELECT ${SELECT_COLUMNS} FROM tasks WHERE (${condition}) AND deleted_at IS NULL ${order}`,
+      params,
+    );
     return rows.map(toTask);
   }
 
   return {
     async findById(id) {
-      const [task] = await select('WHERE id = ?', [id]);
+      const [task] = await select('id = ?', [id]);
       return task ?? null;
     },
 
     async findActiveRanked(scheduledDate, priority) {
       const [task] = await select(
-        `WHERE scheduled_date = ? AND priority = ?
-         AND status = 'active' AND placement_type = 'ranked'`,
+        `scheduled_date = ? AND priority = ? AND status = 'active' AND placement_type = 'ranked'`,
         [scheduledDate, priority],
       );
       return task?.placementType === 'ranked' ? task : null;
@@ -245,25 +266,27 @@ export function createTaskRepository(db: SqlExecutor): TaskRepository {
 
     async listDeck(scheduledDate) {
       const tasks = await select(
-        `WHERE scheduled_date = ? AND status = 'active' ORDER BY ${DECK_ORDER}`,
+        `scheduled_date = ? AND status = 'active'`,
         [scheduledDate],
+        `ORDER BY ${DECK_ORDER}`,
       );
       return tasks.filter(isScheduledTask);
     },
 
     async listActiveCarryOvers(scheduledDate) {
       const tasks = await select(
-        `WHERE scheduled_date = ? AND status = 'active' AND placement_type = 'carryOver'
-         ORDER BY carry_over_order ASC`,
+        `scheduled_date = ? AND status = 'active' AND placement_type = 'carryOver'`,
         [scheduledDate],
+        'ORDER BY carry_over_order ASC',
       );
       return tasks.filter((task): task is CarryOverTask => task.placementType === 'carryOver');
     },
 
     async listFuturePool() {
       const tasks = await select(
-        `WHERE scheduled_date IS NULL AND status = 'active' ORDER BY created_at ASC, id ASC`,
+        `scheduled_date IS NULL AND status = 'active'`,
         [],
+        'ORDER BY created_at DESC, id DESC',
       );
       return tasks.filter(isFutureTask);
     },
@@ -278,7 +301,7 @@ export function createTaskRepository(db: SqlExecutor): TaskRepository {
 
     async update(task) {
       const values = toValues(task);
-      await db.run(`UPDATE tasks SET ${UPDATE_ASSIGNMENTS} WHERE id = ?`, [
+      await db.run(`UPDATE tasks SET ${UPDATE_ASSIGNMENTS} WHERE id = ? AND deleted_at IS NULL`, [
         ...UPDATABLE_COLUMNS.map((column) => values[column]),
         task.id,
       ]);
@@ -286,8 +309,16 @@ export function createTaskRepository(db: SqlExecutor): TaskRepository {
 
     async setCarryOverOrder(id, carryOverOrder) {
       await db.run(
-        `UPDATE tasks SET carry_over_order = ? WHERE id = ? AND placement_type = 'carryOver'`,
+        `UPDATE tasks SET carry_over_order = ?
+         WHERE id = ? AND placement_type = 'carryOver' AND deleted_at IS NULL`,
         [carryOverOrder, id],
+      );
+    },
+
+    async softDelete(id, deletedAt) {
+      await db.run(
+        'UPDATE tasks SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL',
+        [deletedAt, deletedAt, id],
       );
     },
   };

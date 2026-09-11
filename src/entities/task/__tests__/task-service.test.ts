@@ -126,7 +126,7 @@ describe('TaskService', () => {
           priority: 7,
           description: '   ',
           address: ' Main St 1 ',
-          thingsToTake: [' passport ', 'insurance card'],
+          thingsToTake: [{ text: ' passport ' }, { text: 'insurance card', checked: true }],
           durationMinutes: 45,
           travelMinutes: 20,
           reminder: { type: 'exact', localDateTime: '2026-09-11T17:30' },
@@ -147,7 +147,10 @@ describe('TaskService', () => {
         durationMinutes: 45,
         address: 'Main St 1',
         travelMinutes: 20,
-        thingsToTake: ['passport', 'insurance card'],
+        thingsToTake: [
+          { text: 'passport', checked: false },
+          { text: 'insurance card', checked: true },
+        ],
         reminder: { type: 'exact', localDateTime: '2026-09-11T17:30', timeZone: BERLIN },
         createdAt: '2026-09-11T08:00:01.000Z',
         updatedAt: '2026-09-11T08:00:01.000Z',
@@ -639,10 +642,11 @@ describe('TaskService', () => {
 
       expect(await deckTitles(TODAY)).toEqual([]);
       expect(await deckTitles(TOMORROW)).toEqual(['X', 'B']);
-      expect((await service.getHistory(x.id)).map((event) => event.toDate)).toEqual([
-        TODAY,
-        TOMORROW,
-      ]);
+      expect(
+        (await service.getHistory(x.id)).map((event) =>
+          event.type === 'postponed' ? event.toDate : null,
+        ),
+      ).toEqual([TODAY, TOMORROW]);
     });
 
     it('rejects future and completed tasks', async () => {
@@ -950,6 +954,326 @@ describe('TaskService', () => {
 
       expect(service.getToday()).toBe(TODAY);
       expect(tokyo.getToday()).toBe(TOMORROW);
+    });
+  });
+
+  describe('Future pool transitions', () => {
+    it('creates a Future task without date, priority or placement', async () => {
+      const task = unwrap(
+        await service.createFutureTask({
+          title: 'Learn Italian',
+          dayPeriod: 'evening',
+          reminder: { type: 'dayPeriod', period: 'evening' },
+        }),
+      );
+
+      expect(task).toMatchObject({
+        scheduledDate: null,
+        placementType: null,
+        priority: null,
+        carryOverOrder: null,
+        dayPeriod: 'evening',
+        reminder: { type: 'dayPeriod', period: 'evening', timeZone: BERLIN },
+      });
+      expect(await service.getDeck(TODAY)).toEqual([]);
+    });
+
+    it('lists Future tasks newest first', async () => {
+      const older = await createFuture({ title: 'Older' });
+      const newer = await createFuture({ title: 'Newer' });
+
+      expect((await service.getFuturePool()).map((task) => task.id)).toEqual([newer.id, older.id]);
+    });
+
+    it('rejects a reminder with a date for a Future task', async () => {
+      const error = unwrapError(
+        await service.createFutureTask({
+          title: 'Trip',
+          reminder: { type: 'exact', localDateTime: '2026-09-20T10:00' },
+        }),
+      );
+
+      expect(error).toMatchObject({
+        type: 'ValidationError',
+        issues: [
+          { field: 'reminder', message: 'A reminder with a date cannot be set for a Future task' },
+        ],
+      });
+      expect(await service.getFuturePool()).toEqual([]);
+    });
+
+    it('requires a date and a priority to schedule a Future task', async () => {
+      const task = await createFuture();
+
+      const error = unwrapError(
+        await service.scheduleFutureTask(task.id, { scheduledDate: 'someday', priority: null }),
+      );
+
+      expect(error).toMatchObject({
+        type: 'ValidationError',
+        issues: [
+          { field: 'scheduledDate' },
+          { field: 'priority', message: 'Choose a priority from 1 to 10' },
+        ],
+      });
+      expect(await service.getFuturePool()).toEqual([task]);
+    });
+
+    it('moves a scheduled task back to the Future pool and frees its priority', async () => {
+      const task = await create({ title: 'Gym', priority: 6 });
+
+      const moved = unwrap(await service.moveTaskToFuture(task.id));
+
+      expect(moved).toMatchObject({
+        id: task.id,
+        scheduledDate: null,
+        placementType: null,
+        priority: null,
+        carryOverOrder: null,
+      });
+      expect(await service.getFuturePool()).toEqual([moved]);
+      expect(await service.getDeck(TODAY)).toEqual([]);
+      expect((await service.getPriorityAvailability(TODAY))[4]).toEqual({
+        priority: 6,
+        occupiedBy: null,
+      });
+      expect((await create({ priority: 6 })).priority).toBe(6);
+    });
+
+    it('clears the carry-over order when a Mega Crush task moves to Future', async () => {
+      const task = await create();
+      unwrap(await service.postponeUntilTomorrow(task.id));
+
+      const moved = unwrap(await service.moveTaskToFuture(task.id));
+
+      expect(moved).toMatchObject({ placementType: null, carryOverOrder: null });
+    });
+
+    it('keeps the history of a task moved to the Future pool', async () => {
+      const task = await create();
+      const { event } = unwrap(await service.postponeUntilTomorrow(task.id));
+
+      unwrap(await service.moveTaskToFuture(task.id));
+
+      expect(await service.getHistory(task.id)).toEqual([event]);
+    });
+
+    it('asks before turning off a reminder with a date when moving to Future', async () => {
+      const task = await create({
+        reminder: { type: 'exact', localDateTime: '2026-09-11T18:00' },
+      });
+
+      expect(unwrapError(await service.moveTaskToFuture(task.id))).toMatchObject({
+        type: 'ReminderRequiresDate',
+        id: task.id,
+      });
+      expect(unwrap(await service.getTask(task.id))).toEqual(task);
+
+      const moved = unwrap(await service.moveTaskToFuture(task.id, { clearDatedReminder: true }));
+
+      expect(moved).toMatchObject({ scheduledDate: null, reminder: null });
+    });
+
+    it('converts a Mega Crush task into a ranked task', async () => {
+      const task = await create({ priority: 5 });
+      unwrap(await service.postponeUntilTomorrow(task.id));
+
+      const ranked = unwrap(await service.convertCarryOverToRanked(task.id, 8));
+
+      expect(ranked).toMatchObject({
+        scheduledDate: TOMORROW,
+        placementType: 'ranked',
+        priority: 8,
+        carryOverOrder: null,
+      });
+    });
+
+    it('rejects converting to a taken priority and converting a ranked task', async () => {
+      const task = await create({ priority: 5 });
+      const { task: carried } = unwrap(await service.postponeUntilTomorrow(task.id));
+      await create({ title: 'Taken', scheduledDate: TOMORROW, priority: 8 });
+      const ranked = await create({ priority: 2 });
+
+      expect(unwrapError(await service.convertCarryOverToRanked(task.id, 8))).toMatchObject({
+        type: 'PriorityConflict',
+      });
+      expect(unwrap(await service.getTask(task.id))).toEqual(carried);
+      expect(unwrapError(await service.convertCarryOverToRanked(ranked.id, 3))).toMatchObject({
+        type: 'InvalidTaskState',
+        reason: 'ranked',
+      });
+    });
+  });
+
+  describe('editTask', () => {
+    it('saves details and a new day and priority in one step', async () => {
+      const task = await create({ priority: 5 });
+
+      const edited = unwrap(
+        await service.editTask(task.id, {
+          title: 'Renamed',
+          placement: { kind: 'ranked', scheduledDate: TOMORROW, priority: 9 },
+        }),
+      );
+
+      expect(edited).toMatchObject({ title: 'Renamed', scheduledDate: TOMORROW, priority: 9 });
+    });
+
+    it('treats the current priority of the task as available', async () => {
+      const task = await create({ priority: 5 });
+
+      const edited = unwrap(
+        await service.editTask(task.id, {
+          title: 'Same slot',
+          placement: { kind: 'ranked', scheduledDate: TODAY, priority: 5 },
+        }),
+      );
+      const slots = await service.getPriorityAvailability(TODAY, { exceptTaskId: task.id });
+
+      expect(edited).toMatchObject({ title: 'Same slot', priority: 5 });
+      expect(slots.every((slot) => slot.occupiedBy === null)).toBe(true);
+    });
+
+    it('saves nothing when the chosen priority is taken', async () => {
+      const task = await create({ title: 'Original', priority: 5 });
+      await create({ title: 'Taken', scheduledDate: TOMORROW, priority: 9 });
+
+      const error = unwrapError(
+        await service.editTask(task.id, {
+          title: 'Changed',
+          durationMinutes: 30,
+          placement: { kind: 'ranked', scheduledDate: TOMORROW, priority: 9 },
+        }),
+      );
+
+      expect(error).toMatchObject({ type: 'PriorityConflict', priority: 9 });
+      expect(unwrap(await service.getTask(task.id))).toEqual(task);
+    });
+
+    it('reports every validation problem without saving', async () => {
+      const task = await create();
+
+      const error = unwrapError(
+        await service.editTask(task.id, {
+          title: ' ',
+          durationMinutes: -5,
+          travelMinutes: -1,
+          exactTime: '09:00',
+          dayPeriod: 'night',
+          placement: { kind: 'ranked', scheduledDate: TODAY, priority: 11 },
+        }),
+      );
+
+      expect(error).toMatchObject({
+        type: 'ValidationError',
+        issues: [
+          { field: 'priority' },
+          { field: 'title' },
+          { field: 'exactTime' },
+          { field: 'durationMinutes' },
+          { field: 'travelMinutes' },
+        ],
+      });
+      expect(unwrap(await service.getTask(task.id))).toEqual(task);
+    });
+
+    it('keeps a Mega Crush task carried over during a regular edit', async () => {
+      const task = await create();
+      const { task: carried } = unwrap(await service.postponeUntilTomorrow(task.id));
+
+      const edited = unwrap(
+        await service.editTask(task.id, { title: 'Renamed', placement: { kind: 'keep' } }),
+      );
+
+      expect(edited).toMatchObject({
+        title: 'Renamed',
+        placementType: 'carryOver',
+        priority: null,
+        carryOverOrder: carried.carryOverOrder,
+      });
+    });
+
+    it('turns a Mega Crush task into a ranked task when a priority is chosen', async () => {
+      const task = await create();
+      unwrap(await service.postponeUntilTomorrow(task.id));
+
+      const edited = unwrap(
+        await service.editTask(task.id, {
+          placement: { kind: 'ranked', scheduledDate: TOMORROW, priority: 4 },
+        }),
+      );
+
+      expect(edited).toMatchObject({ placementType: 'ranked', priority: 4, carryOverOrder: null });
+    });
+
+    it('moves a task to Future and schedules it again', async () => {
+      const task = await create({ priority: 3 });
+
+      const future = unwrap(await service.editTask(task.id, { placement: { kind: 'future' } }));
+      const scheduled = unwrap(
+        await service.editTask(task.id, {
+          placement: { kind: 'ranked', scheduledDate: TOMORROW, priority: 7 },
+        }),
+      );
+
+      expect(future).toMatchObject({ scheduledDate: null, priority: null });
+      expect(scheduled).toMatchObject({ scheduledDate: TOMORROW, priority: 7 });
+    });
+  });
+
+  describe('things to take', () => {
+    it('drops empty items and keeps the checked state', async () => {
+      const task = await create({
+        thingsToTake: [{ text: 'Passport' }, { text: '   ' }, { text: 'Charger', checked: true }],
+      });
+
+      expect(task.thingsToTake).toEqual([
+        { text: 'Passport', checked: false },
+        { text: 'Charger', checked: true },
+      ]);
+    });
+
+    it('checks and unchecks an item', async () => {
+      const task = await create({ thingsToTake: [{ text: 'Passport' }, { text: 'Charger' }] });
+
+      const checked = unwrap(await service.setThingToTakeChecked(task.id, 1, true));
+      const unchecked = unwrap(await service.setThingToTakeChecked(task.id, 1, false));
+
+      expect(checked.thingsToTake[1]).toEqual({ text: 'Charger', checked: true });
+      expect(unchecked.thingsToTake[1]).toEqual({ text: 'Charger', checked: false });
+      expect(unwrapError(await service.setThingToTakeChecked(task.id, 5, true))).toMatchObject({
+        type: 'ValidationError',
+        issues: [{ field: 'thingsToTake' }],
+      });
+    });
+  });
+
+  describe('deleteTask', () => {
+    it('removes the task from active views, frees its priority and keeps history', async () => {
+      const task = await create({ priority: 7 });
+      const other = await create({ title: 'Carried', priority: 4 });
+      const { event } = unwrap(await service.postponeUntilTomorrow(other.id));
+
+      unwrap(await service.deleteTask(task.id));
+      unwrap(await service.deleteTask(other.id));
+
+      expect(unwrapError(await service.getTask(task.id))).toMatchObject({ type: 'TaskNotFound' });
+      expect(await service.getDeck(TODAY)).toEqual([]);
+      expect(await service.getDeck(TOMORROW)).toEqual([]);
+      expect((await service.getPriorityAvailability(TODAY))[3]).toEqual({
+        priority: 7,
+        occupiedBy: null,
+      });
+      expect((await create({ priority: 7 })).priority).toBe(7);
+      expect(await service.getHistory(other.id)).toEqual([event]);
+    });
+
+    it('removes a Future task from the pool', async () => {
+      const task = await createFuture();
+
+      unwrap(await service.deleteTask(task.id));
+
+      expect(await service.getFuturePool()).toEqual([]);
     });
   });
 

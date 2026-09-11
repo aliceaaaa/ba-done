@@ -25,9 +25,17 @@ export type TaskNotFound = {
   message: string;
 };
 
-export type TaskAction = 'complete' | 'postpone' | 'reschedule' | 'schedule' | 'changePriority';
+export type TaskAction =
+  | 'complete'
+  | 'postpone'
+  | 'reschedule'
+  | 'schedule'
+  | 'changePriority'
+  | 'convert'
+  | 'moveToFuture'
+  | 'edit';
 
-export type InvalidTaskStateReason = 'completed' | 'future' | 'scheduled';
+export type InvalidTaskStateReason = 'completed' | 'future' | 'scheduled' | 'ranked';
 
 export type InvalidTaskState = {
   type: 'InvalidTaskState';
@@ -54,26 +62,20 @@ export type UndoNotAvailable = {
   message: string;
 };
 
+export type ReminderRequiresDate = {
+  type: 'ReminderRequiresDate';
+  id: string;
+  message: string;
+};
+
 export type TaskError =
   | TaskValidationError
   | PriorityConflict
   | TaskNotFound
   | InvalidTaskState
   | SwapNotAllowed
-  | UndoNotAvailable;
-
-const UNDO_MESSAGES: Record<UndoNotAvailableReason, string> = {
-  'not-found': 'This action no longer exists',
-  superseded: 'Only the latest action of a task can be undone',
-  'state-changed': 'The task has changed since this action',
-};
-
-export function undoNotAvailable(
-  eventId: string,
-  reason: UndoNotAvailableReason,
-): UndoNotAvailable {
-  return { type: 'UndoNotAvailable', eventId, reason, message: UNDO_MESSAGES[reason] };
-}
+  | UndoNotAvailable
+  | ReminderRequiresDate;
 
 export function validationError(issues: ValidationIssue[]): TaskValidationError {
   return {
@@ -103,6 +105,9 @@ const ACTION_PHRASES: Record<TaskAction, string> = {
   reschedule: 'reschedule',
   schedule: 'schedule',
   changePriority: 'change the priority of',
+  convert: 'convert',
+  moveToFuture: 'move to Future',
+  edit: 'change the placement of',
 };
 
 export function invalidTaskState(
@@ -127,4 +132,25 @@ const SWAP_MESSAGES: Record<SwapNotAllowedReason, string> = {
 
 export function swapNotAllowed(reason: SwapNotAllowedReason): SwapNotAllowed {
   return { type: 'SwapNotAllowed', reason, message: SWAP_MESSAGES[reason] };
+}
+
+const UNDO_MESSAGES: Record<UndoNotAvailableReason, string> = {
+  'not-found': 'This action no longer exists',
+  superseded: 'Only the latest action of a task can be undone',
+  'state-changed': 'The task has changed since this action',
+};
+
+export function undoNotAvailable(
+  eventId: string,
+  reason: UndoNotAvailableReason,
+): UndoNotAvailable {
+  return { type: 'UndoNotAvailable', eventId, reason, message: UNDO_MESSAGES[reason] };
+}
+
+export function reminderRequiresDate(id: string): ReminderRequiresDate {
+  return {
+    type: 'ReminderRequiresDate',
+    id,
+    message: 'This task has a reminder with a date. Turn it off to move the task to Future.',
+  };
 }

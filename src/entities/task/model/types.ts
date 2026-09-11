@@ -17,6 +17,16 @@ export type TaskReminder =
 export type ReminderInput =
   { type: 'exact'; localDateTime: string } | { type: 'dayPeriod'; period: DayPeriod };
 
+export type ThingToTake = {
+  text: string;
+  checked: boolean;
+};
+
+export type ThingToTakeInput = {
+  text: string;
+  checked?: boolean;
+};
+
 export type TaskDetails = {
   title: string;
   description: string | null;
@@ -25,7 +35,7 @@ export type TaskDetails = {
   durationMinutes: number | null;
   address: string | null;
   travelMinutes: number | null;
-  thingsToTake: string[];
+  thingsToTake: ThingToTake[];
   reminder: TaskReminder | null;
 };
 
@@ -80,15 +90,36 @@ export type RankedSlot = {
   priority: number;
 };
 
-export type TaskDetailsInput = Partial<Omit<TaskDetails, 'title' | 'reminder'>> & {
-  reminder?: ReminderInput | null;
+export type RankedSlotInput = {
+  scheduledDate: string;
+  priority: number | null;
 };
 
-export type CreateTaskInput = TaskDetailsInput & RankedSlot & { title: string };
+export type TaskDetailsInput = Partial<Omit<TaskDetails, 'title' | 'reminder' | 'thingsToTake'>> & {
+  reminder?: ReminderInput | null;
+  thingsToTake?: ThingToTakeInput[];
+};
+
+export type CreateTaskInput = TaskDetailsInput & RankedSlotInput & { title: string };
 
 export type CreateFutureTaskInput = TaskDetailsInput & { title: string };
 
 export type UpdateTaskInput = TaskDetailsInput & { title?: string };
+
+export type PlacementChange =
+  | { kind: 'keep' }
+  | ({ kind: 'ranked' } & RankedSlotInput)
+  | { kind: 'future'; clearDatedReminder?: boolean };
+
+export type EditTaskInput = UpdateTaskInput & { placement: PlacementChange };
+
+export type MoveToFutureOptions = {
+  clearDatedReminder?: boolean;
+};
+
+export type PriorityAvailabilityOptions = {
+  exceptTaskId?: string;
+};
 
 export type PostponedEvent = {
   id: string;

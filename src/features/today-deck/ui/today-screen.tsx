@@ -5,17 +5,18 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
   describeTaskError,
+  formatTaskDate,
   useTaskService,
   type ScheduledTask,
   type TaskResult,
 } from '@/entities/task';
 import { UI_STRINGS } from '@/shared/config/ui-strings';
+import { DateSwitcher } from '@/shared/ui/date-switcher';
 import { TextButton } from '@/shared/ui/text-button';
 import { colors, spacing } from '@/shared/ui/theme';
 
 import { withSentBackLast } from '../model/display-order';
 import { useDeck } from '../model/use-deck';
-import { DateSwitcher } from './date-switcher';
 import { SwipeableTaskCard } from './swipeable-task-card';
 import { UndoBar } from './undo-bar';
 
@@ -26,11 +27,15 @@ type Notice = {
 
 type ActionResult = TaskResult<{ event: { id: string } }>;
 
-export function TodayScreen() {
+type TodayScreenProps = {
+  initialDate?: string | null;
+};
+
+export function TodayScreen({ initialDate = null }: TodayScreenProps) {
   const service = useTaskService();
   const router = useRouter();
   const today = useMemo(() => service.getToday(), [service]);
-  const [date, setDate] = useState(today);
+  const [date, setDate] = useState(initialDate ?? today);
   const { deck, reload } = useDeck(date);
   const [sentBackIds, setSentBackIds] = useState<string[]>([]);
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -84,15 +89,14 @@ export function TodayScreen() {
 
   const dismissNotice = useCallback(() => setNotice(null), []);
 
-  const openTask = useCallback(
-    (task: ScheduledTask) => router.push(`/task/${task.id}`),
-    [router],
-  );
+  const openTask = useCallback((task: ScheduledTask) => router.push(`/task/${task.id}`), [router]);
 
   const createTask = useCallback(
     () => router.push({ pathname: '/task/new', params: { date } }),
     [router, date],
   );
+
+  const openFuturePool = useCallback(() => router.push('/future'), [router]);
 
   const changeDate = useCallback((next: string) => {
     setSentBackIds([]);
@@ -130,10 +134,18 @@ export function TodayScreen() {
         <Text accessibilityRole="header" style={styles.title}>
           {UI_STRINGS.todayList}
         </Text>
-        <TextButton label="New task" variant="primary" onPress={createTask} />
+        <View style={styles.headerActions}>
+          <TextButton label="Future" onPress={openFuturePool} />
+          <TextButton label="New task" variant="primary" onPress={createTask} />
+        </View>
       </View>
       <View style={styles.dateRow}>
-        <DateSwitcher date={date} today={today} onChange={changeDate} />
+        <DateSwitcher
+          date={date}
+          today={today}
+          label={formatTaskDate(date)}
+          onChange={changeDate}
+        />
       </View>
       {cards === null ? null : renderDeck(cards)}
       {notice === null ? null : (
@@ -157,8 +169,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: spacing.sm,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
   },
   title: {
     fontSize: 28,

@@ -23,3 +23,4 @@ export {
   formatTaskDate,
   taskTimeLabel,
 } from './lib/task-format';
+export { PriorityPicker } from './ui/priority-picker';

@@ -1,7 +1,8 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import type { PrioritySlot } from '@/entities/task';
 import { colors, spacing } from '@/shared/ui/theme';
+
+import type { PrioritySlot } from '../model/types';
 
 type PriorityPickerProps = {
   slots: readonly PrioritySlot[];

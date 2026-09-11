@@ -13,9 +13,16 @@ import {
   PRIORITY_MIN,
   type DayPeriod,
   type RankedSlot,
+  type RankedSlotInput,
   type TaskDetails,
   type TaskReminder,
 } from './types';
+
+export type DetailsContext = {
+  isFuture: boolean;
+};
+
+const SCHEDULED: DetailsContext = { isFuture: false };
 
 export function isDayPeriod(value: string): value is DayPeriod {
   return (DAY_PERIODS as readonly string[]).includes(value);
@@ -37,7 +44,10 @@ function normalizeOptionalText(value: string | null): string | null {
   return trimmed.length === 0 ? null : trimmed;
 }
 
-function priorityIssues(priority: number): ValidationIssue[] {
+function priorityIssues(priority: number | null): ValidationIssue[] {
+  if (priority === null) {
+    return [{ field: 'priority', message: 'Choose a priority from 1 to 10' }];
+  }
   if (!Number.isInteger(priority) || priority < PRIORITY_MIN || priority > PRIORITY_MAX) {
     return [
       {
@@ -49,7 +59,7 @@ function priorityIssues(priority: number): ValidationIssue[] {
   return [];
 }
 
-function reminderIssues(reminder: TaskReminder | null): ValidationIssue[] {
+function reminderIssues(reminder: TaskReminder | null, context: DetailsContext): ValidationIssue[] {
   if (reminder === null) {
     return [];
   }
@@ -63,7 +73,13 @@ function reminderIssues(reminder: TaskReminder | null): ValidationIssue[] {
   if (reminder.type === 'exact' && !isValidLocalDateTime(reminder.localDateTime)) {
     issues.push({
       field: 'reminder',
-      message: 'Exact reminder must use a YYYY-MM-DDTHH:mm local date-time',
+      message: 'Exact reminder must use a valid YYYY-MM-DD date and HH:mm time',
+    });
+  }
+  if (reminder.type === 'exact' && context.isFuture) {
+    issues.push({
+      field: 'reminder',
+      message: 'A reminder with a date cannot be set for a Future task',
     });
   }
   if (reminder.type === 'dayPeriod' && !isDayPeriod(reminder.period)) {
@@ -75,19 +91,24 @@ function reminderIssues(reminder: TaskReminder | null): ValidationIssue[] {
   return issues;
 }
 
-export function validateRankedSlot(slot: RankedSlot): Result<RankedSlot, TaskValidationError> {
+export function validateRankedSlot(slot: RankedSlotInput): Result<RankedSlot, TaskValidationError> {
   const issues: ValidationIssue[] = [];
   if (!isValidLocalDate(slot.scheduledDate)) {
     issues.push({ field: 'scheduledDate', message: 'Date must be a valid YYYY-MM-DD date' });
   }
   issues.push(...priorityIssues(slot.priority));
-  return issues.length > 0 ? err(validationError(issues)) : ok(slot);
+  if (issues.length > 0 || slot.priority === null) {
+    return err(validationError(issues));
+  }
+  return ok({ scheduledDate: slot.scheduledDate, priority: slot.priority });
 }
 
-export function validateDetails(details: TaskDetails): Result<TaskDetails, TaskValidationError> {
+export function validateDetails(
+  details: TaskDetails,
+  context: DetailsContext = SCHEDULED,
+): Result<TaskDetails, TaskValidationError> {
   const issues: ValidationIssue[] = [];
   const title = details.title.trim();
-  const thingsToTake = details.thingsToTake.map((item) => item.trim());
 
   if (title.length === 0) {
     issues.push({ field: 'title', message: 'Title is required' });
@@ -113,10 +134,7 @@ export function validateDetails(details: TaskDetails): Result<TaskDetails, TaskV
   if (details.travelMinutes !== null && !isNonNegativeInteger(details.travelMinutes)) {
     issues.push({ field: 'travelMinutes', message: 'Travel time must be a non-negative integer' });
   }
-  if (thingsToTake.some((item) => item.length === 0)) {
-    issues.push({ field: 'thingsToTake', message: 'Items to take cannot be empty' });
-  }
-  issues.push(...reminderIssues(details.reminder));
+  issues.push(...reminderIssues(details.reminder, context));
 
   if (issues.length > 0) {
     return err(validationError(issues));
@@ -127,6 +145,8 @@ export function validateDetails(details: TaskDetails): Result<TaskDetails, TaskV
     title,
     description: normalizeOptionalText(details.description),
     address: normalizeOptionalText(details.address),
-    thingsToTake,
+    thingsToTake: details.thingsToTake
+      .map((item) => ({ text: item.text.trim(), checked: item.checked }))
+      .filter((item) => item.text.length > 0),
   });
 }

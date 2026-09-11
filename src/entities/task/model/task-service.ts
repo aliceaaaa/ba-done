@@ -12,13 +12,17 @@ import { compareDeckPositions, toDeckPosition } from './deck-position';
 import {
   invalidTaskState,
   priorityConflict,
+  reminderRequiresDate,
   swapNotAllowed,
   taskNotFound,
   undoNotAvailable,
+  validationError,
   type InvalidTaskState,
   type PriorityConflict,
   type TaskAction,
   type TaskError,
+  type TaskValidationError,
+  type ValidationIssue,
 } from './task-errors';
 import { validateDetails, validateRankedSlot } from './task-validation';
 import {
@@ -32,10 +36,15 @@ import {
   type CreateFutureTaskInput,
   type CreateTaskInput,
   type DeckPosition,
+  type EditTaskInput,
   type FutureTask,
+  type MoveToFutureOptions,
+  type PlacementChange,
   type PostponedEvent,
+  type PriorityAvailabilityOptions,
   type PrioritySlot,
   type RankedSlot,
+  type RankedSlotInput,
   type RankedTask,
   type ReminderInput,
   type ScheduledTask,
@@ -44,6 +53,8 @@ import {
   type TaskDetailsInput,
   type TaskEvent,
   type TaskReminder,
+  type ThingToTake,
+  type ThingToTakeInput,
   type UpdateTaskInput,
 } from './types';
 
@@ -73,20 +84,29 @@ export type CompleteResult = {
 
 export type TaskService = {
   getToday(): string;
+  getTimeZone(): string;
   getTask(id: string): Promise<TaskResult<Task>>;
   getDeck(scheduledDate: string): Promise<ScheduledTask[]>;
   getFuturePool(): Promise<FutureTask[]>;
   getHistory(id: string): Promise<TaskEvent[]>;
-  getPriorityAvailability(scheduledDate: string): Promise<PrioritySlot[]>;
+  getPriorityAvailability(
+    scheduledDate: string,
+    options?: PriorityAvailabilityOptions,
+  ): Promise<PrioritySlot[]>;
   createTask(input: CreateTaskInput): Promise<TaskResult<RankedTask>>;
   createFutureTask(input: CreateFutureTaskInput): Promise<TaskResult<FutureTask>>;
   updateTask(id: string, patch: UpdateTaskInput): Promise<TaskResult<Task>>;
+  editTask(id: string, input: EditTaskInput): Promise<TaskResult<Task>>;
   changePriority(id: string, priority: number): Promise<TaskResult<RankedTask>>;
+  convertCarryOverToRanked(id: string, priority: number | null): Promise<TaskResult<RankedTask>>;
   swapPriorities(firstId: string, secondId: string): Promise<TaskResult<SwappedTasks>>;
   completeTask(id: string): Promise<TaskResult<CompleteResult>>;
   postponeUntilTomorrow(id: string): Promise<TaskResult<PostponeResult>>;
-  rescheduleTask(id: string, slot: RankedSlot): Promise<TaskResult<RankedTask>>;
-  scheduleFutureTask(id: string, slot: RankedSlot): Promise<TaskResult<RankedTask>>;
+  rescheduleTask(id: string, slot: RankedSlotInput): Promise<TaskResult<RankedTask>>;
+  scheduleFutureTask(id: string, slot: RankedSlotInput): Promise<TaskResult<RankedTask>>;
+  moveTaskToFuture(id: string, options?: MoveToFutureOptions): Promise<TaskResult<FutureTask>>;
+  setThingToTakeChecked(id: string, index: number, checked: boolean): Promise<TaskResult<Task>>;
+  deleteTask(id: string): Promise<TaskResult<{ id: string }>>;
   undo(eventId: string): Promise<TaskResult<Task>>;
 };
 
@@ -117,6 +137,10 @@ function createRepositories(db: SqlExecutor): Repositories {
   return { tasks: createTaskRepository(db), events: createTaskEventRepository(db) };
 }
 
+function issuesOf(result: Result<unknown, TaskValidationError>): ValidationIssue[] {
+  return result.ok ? [] : result.error.issues;
+}
+
 function resolveReminder(input: ReminderInput | null, timeZone: string): TaskReminder | null {
   if (input === null) {
     return null;
@@ -124,6 +148,10 @@ function resolveReminder(input: ReminderInput | null, timeZone: string): TaskRem
   return input.type === 'exact'
     ? { type: 'exact', localDateTime: input.localDateTime, timeZone }
     : { type: 'dayPeriod', period: input.period, timeZone };
+}
+
+function normalizeThings(items: readonly ThingToTakeInput[]): ThingToTake[] {
+  return items.map((item) => ({ text: item.text, checked: item.checked ?? false }));
 }
 
 function detailsFromInput(title: string, input: TaskDetailsInput, timeZone: string): TaskDetails {
@@ -135,7 +163,7 @@ function detailsFromInput(title: string, input: TaskDetailsInput, timeZone: stri
     durationMinutes: input.durationMinutes ?? null,
     address: input.address ?? null,
     travelMinutes: input.travelMinutes ?? null,
-    thingsToTake: input.thingsToTake ?? [],
+    thingsToTake: normalizeThings(input.thingsToTake ?? []),
     reminder: resolveReminder(input.reminder ?? null, timeZone),
   };
 }
@@ -151,6 +179,16 @@ function detailsFromTask(task: Task): TaskDetails {
     travelMinutes: task.travelMinutes,
     thingsToTake: task.thingsToTake,
     reminder: task.reminder,
+  };
+}
+
+function mergeDetails(task: Task, patch: UpdateTaskInput, timeZone: string): TaskDetails {
+  const { reminder, thingsToTake, ...rest } = patch;
+  return {
+    ...detailsFromTask(task),
+    ...rest,
+    ...(thingsToTake === undefined ? {} : { thingsToTake: normalizeThings(thingsToTake) }),
+    ...(reminder === undefined ? {} : { reminder: resolveReminder(reminder, timeZone) }),
   };
 }
 
@@ -264,12 +302,7 @@ async function writeRestored(repos: Repositories, task: Task): Promise<TaskResul
   return ok(task);
 }
 
-export function createTaskService({
-  db,
-  now,
-  generateId,
-  timeZone,
-}: TaskServiceDeps): TaskService {
+export function createTaskService({ db, now, generateId, timeZone }: TaskServiceDeps): TaskService {
   const timestamp = () => now().toISOString();
 
   async function inTransaction<T>(
@@ -303,22 +336,84 @@ export function createTaskService({
   async function placeRanked(
     repos: Repositories,
     task: Task,
-    requested: RankedSlot,
+    requested: RankedSlotInput,
+    details: TaskDetails = detailsFromTask(task),
   ): Promise<TaskResult<RankedTask>> {
     const slot = validateRankedSlot(requested);
-    if (!slot.ok) {
-      return slot;
+    const validated = validateDetails(details);
+    if (!slot.ok || !validated.ok) {
+      return err(validationError([...issuesOf(slot), ...issuesOf(validated)]));
     }
     const conflict = await findConflict(repos.tasks, slot.value, task.id);
     if (conflict !== null) {
       return err(conflict);
     }
-    return writeRanked(repos.tasks, toRanked(task, slot.value, timestamp()), repos.tasks.update);
+    const placed: RankedTask = { ...toRanked(task, slot.value, timestamp()), ...validated.value };
+    return writeRanked(repos.tasks, placed, repos.tasks.update);
+  }
+
+  async function saveDetails(
+    repos: Repositories,
+    task: Task,
+    details: TaskDetails,
+  ): Promise<TaskResult<Task>> {
+    const validated = validateDetails(details, { isFuture: isFutureTask(task) });
+    if (!validated.ok) {
+      return validated;
+    }
+    const updated: Task = { ...task, ...validated.value, updatedAt: timestamp() };
+    await repos.tasks.update(updated);
+    return ok(updated);
+  }
+
+  async function moveToFuture(
+    repos: Repositories,
+    task: Task,
+    details: TaskDetails,
+    clearDatedReminder: boolean,
+  ): Promise<TaskResult<FutureTask>> {
+    const hasDatedReminder = details.reminder?.type === 'exact';
+    if (hasDatedReminder && !clearDatedReminder) {
+      return err(reminderRequiresDate(task.id));
+    }
+    const validated = validateDetails(hasDatedReminder ? { ...details, reminder: null } : details, {
+      isFuture: true,
+    });
+    if (!validated.ok) {
+      return validated;
+    }
+    const moved: FutureTask = {
+      ...task,
+      ...validated.value,
+      ...FUTURE_PLACEMENT,
+      updatedAt: timestamp(),
+    };
+    await repos.tasks.update(moved);
+    return ok(moved);
+  }
+
+  function applyEdit(
+    repos: Repositories,
+    task: Task,
+    details: TaskDetails,
+    change: PlacementChange,
+  ): Promise<TaskResult<Task>> {
+    if (change.kind === 'ranked') {
+      return placeRanked(repos, task, change, details);
+    }
+    if (change.kind === 'future' && isScheduledTask(task)) {
+      return moveToFuture(repos, task, details, change.clearDatedReminder ?? false);
+    }
+    return saveDetails(repos, task, details);
   }
 
   return {
     getToday() {
       return toLocalDate(now(), timeZone());
+    },
+
+    getTimeZone() {
+      return timeZone();
     },
 
     async getTask(id) {
@@ -338,7 +433,7 @@ export function createTaskService({
       return createTaskEventRepository(db).listByTask(id);
     },
 
-    async getPriorityAvailability(scheduledDate) {
+    async getPriorityAvailability(scheduledDate, options = {}) {
       const deck = await createTaskRepository(db).listDeck(scheduledDate);
       const occupants = new Map(
         deck.flatMap((task) =>
@@ -347,9 +442,10 @@ export function createTaskService({
       );
       return PRIORITIES_DESCENDING.map((priority) => {
         const occupant = occupants.get(priority);
+        const isFree = occupant === undefined || occupant.id === options.exceptTaskId;
         return {
           priority,
-          occupiedBy: occupant === undefined ? null : { id: occupant.id, title: occupant.title },
+          occupiedBy: isFree ? null : { id: occupant.id, title: occupant.title },
         };
       });
     },
@@ -360,12 +456,9 @@ export function createTaskService({
           scheduledDate: input.scheduledDate,
           priority: input.priority,
         });
-        if (!slot.ok) {
-          return slot;
-        }
         const details = validateDetails(detailsFromInput(input.title, input, timeZone()));
-        if (!details.ok) {
-          return details;
+        if (!slot.ok || !details.ok) {
+          return err(validationError([...issuesOf(slot), ...issuesOf(details)]));
         }
         const conflict = await findConflict(repos.tasks, slot.value, null);
         if (conflict !== null) {
@@ -390,7 +483,9 @@ export function createTaskService({
 
     createFutureTask(input) {
       return inTransaction(async (repos) => {
-        const details = validateDetails(detailsFromInput(input.title, input, timeZone()));
+        const details = validateDetails(detailsFromInput(input.title, input, timeZone()), {
+          isFuture: true,
+        });
         if (!details.ok) {
           return details;
         }
@@ -411,19 +506,23 @@ export function createTaskService({
 
     updateTask(id, patch) {
       return inTransaction((repos) =>
+        withTask(repos, id, (task) =>
+          saveDetails(repos, task, mergeDetails(task, patch, timeZone())),
+        ),
+      );
+    },
+
+    editTask(id, input) {
+      return inTransaction((repos) =>
         withTask(repos, id, async (task) => {
-          const { reminder, ...rest } = patch;
-          const details = validateDetails({
-            ...detailsFromTask(task),
-            ...rest,
-            ...(reminder === undefined ? {} : { reminder: resolveReminder(reminder, timeZone()) }),
-          });
-          if (!details.ok) {
-            return details;
+          const { placement, ...patch } = input;
+          if (placement.kind !== 'keep') {
+            const blocked = completedGuard(task, 'edit');
+            if (blocked !== null) {
+              return err(blocked);
+            }
           }
-          const updated: Task = { ...task, ...details.value, updatedAt: timestamp() };
-          await repos.tasks.update(updated);
-          return ok(updated);
+          return applyEdit(repos, task, mergeDetails(task, patch, timeZone()), placement);
         }),
       );
     },
@@ -437,6 +536,27 @@ export function createTaskService({
           }
           if (!isScheduledTask(task)) {
             return err(invalidTaskState(task.id, 'changePriority', 'future'));
+          }
+          return placeRanked(repos, task, { scheduledDate: task.scheduledDate, priority });
+        }),
+      );
+    },
+
+    convertCarryOverToRanked(id, priority) {
+      return inTransaction((repos) =>
+        withTask(repos, id, async (task) => {
+          const blocked = completedGuard(task, 'convert');
+          if (blocked !== null) {
+            return err(blocked);
+          }
+          if (task.placementType !== 'carryOver') {
+            return err(
+              invalidTaskState(
+                task.id,
+                'convert',
+                task.scheduledDate === null ? 'future' : 'ranked',
+              ),
+            );
           }
           return placeRanked(repos, task, { scheduledDate: task.scheduledDate, priority });
         }),
@@ -588,6 +708,54 @@ export function createTaskService({
             return err(invalidTaskState(task.id, 'schedule', 'scheduled'));
           }
           return placeRanked(repos, task, slot);
+        }),
+      );
+    },
+
+    moveTaskToFuture(id, options = {}) {
+      return inTransaction((repos) =>
+        withTask(repos, id, async (task) => {
+          const blocked = completedGuard(task, 'moveToFuture');
+          if (blocked !== null) {
+            return err(blocked);
+          }
+          if (!isScheduledTask(task)) {
+            return err(invalidTaskState(task.id, 'moveToFuture', 'future'));
+          }
+          return moveToFuture(
+            repos,
+            task,
+            detailsFromTask(task),
+            options.clearDatedReminder ?? false,
+          );
+        }),
+      );
+    },
+
+    setThingToTakeChecked(id, index, checked) {
+      return inTransaction((repos) =>
+        withTask(repos, id, async (task) => {
+          if (task.thingsToTake[index] === undefined) {
+            return err(validationError([{ field: 'thingsToTake', message: 'Item not found' }]));
+          }
+          const updated: Task = {
+            ...task,
+            thingsToTake: task.thingsToTake.map((item, position) =>
+              position === index ? { ...item, checked } : item,
+            ),
+            updatedAt: timestamp(),
+          };
+          await repos.tasks.update(updated);
+          return ok(updated);
+        }),
+      );
+    },
+
+    deleteTask(id) {
+      return inTransaction((repos) =>
+        withTask(repos, id, async (task) => {
+          await repos.tasks.softDelete(task.id, timestamp());
+          return ok({ id: task.id });
         }),
       );
     },

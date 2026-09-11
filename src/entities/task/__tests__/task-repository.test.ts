@@ -68,7 +68,10 @@ describe('TaskRepository', () => {
     const tasks: Task[] = [
       {
         ...DETAILS,
-        thingsToTake: ['bags', 'list'],
+        thingsToTake: [
+          { text: 'bags', checked: true },
+          { text: 'list', checked: false },
+        ],
         id: 'ranked',
         description: 'Weekly shopping',
         exactTime: '18:15',
@@ -102,6 +105,16 @@ describe('TaskRepository', () => {
     for (const task of tasks) {
       expect(await repo.findById(task.id)).toEqual(task);
     }
+  });
+
+  it('hides soft-deleted tasks and frees their position', async () => {
+    await insertRow({ id: 'a' });
+
+    await repo.softDelete('a', '2026-09-11T09:00:00.000Z');
+
+    expect(await repo.findById('a')).toBeNull();
+    expect(await repo.listDeck('2026-09-11')).toEqual([]);
+    await expect(insertRow({ id: 'b' })).resolves.toBeUndefined();
   });
 
   it('enforces a unique priority among active ranked tasks of a day', async () => {
