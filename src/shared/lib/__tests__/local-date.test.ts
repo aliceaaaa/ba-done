@@ -1,6 +1,13 @@
 import {
   addDays,
+  addMinutesToLocalDateTime,
+  addMonths,
   daysBetween,
+  daysInMonth,
+  minutesBetweenLocalDateTimes,
+  startOfLocalDay,
+  startOfMonth,
+  startOfWeek,
   isValidLocalDate,
   isValidLocalDateTime,
   isValidLocalTime,
@@ -68,6 +75,20 @@ describe('local-date', () => {
     expect(toLocalDateTime(instant, 'Asia/Tokyo')).toBe('2026-09-12T07:30');
     expect(daysBetween('2026-03-28', '2026-03-30')).toBe(2);
     expect(shiftLocalDateTime('2026-09-11T18:00', 1)).toBe('2026-09-12T18:00');
+  });
+
+  it('does wall-clock arithmetic and calendar navigation', () => {
+    expect(addMinutesToLocalDateTime('2026-09-11T23:30', 90)).toBe('2026-09-12T01:00');
+    expect(minutesBetweenLocalDateTimes('2026-09-11T22:00', '2026-09-12T01:30')).toBe(210);
+    expect(startOfWeek('2026-09-13')).toBe('2026-09-07');
+    expect(startOfWeek('2026-09-07')).toBe('2026-09-07');
+    expect(startOfMonth('2026-09-13')).toBe('2026-09-01');
+    expect(daysInMonth('2028-02-10')).toBe(29);
+    expect(addMonths('2026-01-31', 1)).toBe('2026-02-28');
+    expect(addMonths('2026-01-15', -1)).toBe('2025-12-15');
+    expect(startOfLocalDay('2026-03-29', 'Europe/Berlin').toISOString()).toBe(
+      '2026-03-28T23:00:00.000Z',
+    );
   });
 
   it('validates dates, times, date-times and time zones', () => {

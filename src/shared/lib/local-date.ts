@@ -173,6 +173,64 @@ export function daysBetween(from: string, to: string): number {
   return Math.round((endMs - startMs) / DAY_MS);
 }
 
+function localDateTimeToWallMs(localDateTime: string): number {
+  if (!isValidLocalDateTime(localDateTime)) {
+    throw new Error(`Invalid local date-time "${localDateTime}"`);
+  }
+  const [date = '', time = ''] = localDateTime.split('T');
+  const [year = 0, month = 1, day = 1] = date.split('-').map(Number);
+  const [hour = 0, minute = 0] = time.split(':').map(Number);
+  return Date.UTC(year, month - 1, day, hour, minute);
+}
+
+export function addMinutesToLocalDateTime(localDateTime: string, minutes: number): string {
+  const shifted = new Date(localDateTimeToWallMs(localDateTime) + minutes * MINUTE_MS);
+  return `${shifted.toISOString().slice(0, 10)}T${shifted.toISOString().slice(11, 16)}`;
+}
+
+export function minutesBetweenLocalDateTimes(from: string, to: string): number {
+  return Math.round((localDateTimeToWallMs(to) - localDateTimeToWallMs(from)) / MINUTE_MS);
+}
+
+export function startOfLocalDay(localDate: string, timeZone: string): Date {
+  return zonedDateTimeToInstant(`${localDate}T00:00`, timeZone);
+}
+
+export function dayOfWeek(localDate: string): number {
+  const parts = parseLocalDate(localDate);
+  if (parts === null) {
+    throw new Error(`Invalid local date "${localDate}"`);
+  }
+  return new Date(Date.UTC(parts.year, parts.month - 1, parts.day)).getUTCDay();
+}
+
+export function startOfWeek(localDate: string): string {
+  return addDays(localDate, -((dayOfWeek(localDate) + 6) % 7));
+}
+
+export function startOfMonth(localDate: string): string {
+  return `${localDate.slice(0, 8)}01`;
+}
+
+export function daysInMonth(localDate: string): number {
+  const parts = parseLocalDate(startOfMonth(localDate));
+  if (parts === null) {
+    throw new Error(`Invalid local date "${localDate}"`);
+  }
+  return new Date(Date.UTC(parts.year, parts.month, 0)).getUTCDate();
+}
+
+export function addMonths(localDate: string, months: number): string {
+  const parts = parseLocalDate(localDate);
+  if (parts === null) {
+    throw new Error(`Invalid local date "${localDate}"`);
+  }
+  const first = new Date(Date.UTC(parts.year, parts.month - 1 + months, 1));
+  const monthStart = first.toISOString().slice(0, 10);
+  const day = Math.min(parts.day, daysInMonth(monthStart));
+  return `${monthStart.slice(0, 8)}${pad(day)}`;
+}
+
 export function shiftLocalDateTime(localDateTime: string, days: number): string {
   const [date = '', time = ''] = localDateTime.split('T');
   return `${addDays(date, days)}T${time}`;

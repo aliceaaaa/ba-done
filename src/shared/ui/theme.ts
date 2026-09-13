@@ -10,6 +10,9 @@ export const colors = {
   notTonight: '#B45309',
   danger: '#B91C1C',
   disabled: '#D4D4D8',
+  event: '#DB2777',
+  eventSurface: '#FDF2F8',
+  accentSurface: '#EFF6FF',
 } as const;
 
 export const spacing = {

@@ -1,13 +1,16 @@
 import type { SqlExecutor } from '@/database/sql-database';
 
 import {
+  REMINDER_OWNER_TYPES,
   REMINDER_SCHEDULE_STATUSES,
+  type ReminderOwnerType,
   type ReminderSchedule,
   type ReminderScheduleStatus,
 } from '../model/types';
 
 type ReminderScheduleRow = {
-  task_id: string;
+  owner_type: string;
+  owner_id: string;
   status: string;
   notification_id: string | null;
   fire_at: string | null;
@@ -17,26 +20,31 @@ type ReminderScheduleRow = {
   updated_at: string;
 };
 
-const SELECT =
-  'SELECT task_id, status, notification_id, fire_at, fingerprint, scheduled_at, error, updated_at FROM reminder_schedules';
+const SELECT = `SELECT owner_type, owner_id, status, notification_id, fire_at, fingerprint,
+  scheduled_at, error, updated_at FROM reminder_schedules`;
 
 export type ReminderScheduleRepository = {
-  get(taskId: string): Promise<ReminderSchedule | null>;
+  get(ownerType: ReminderOwnerType, ownerId: string): Promise<ReminderSchedule | null>;
   listAll(): Promise<ReminderSchedule[]>;
   save(schedule: ReminderSchedule): Promise<void>;
-  delete(taskId: string): Promise<void>;
+  delete(ownerType: ReminderOwnerType, ownerId: string): Promise<void>;
 };
 
 function isStatus(value: string): value is ReminderScheduleStatus {
   return (REMINDER_SCHEDULE_STATUSES as readonly string[]).includes(value);
 }
 
+function isOwnerType(value: string): value is ReminderOwnerType {
+  return (REMINDER_OWNER_TYPES as readonly string[]).includes(value);
+}
+
 function toSchedule(row: ReminderScheduleRow): ReminderSchedule {
-  if (!isStatus(row.status)) {
-    throw new Error(`Reminder schedule for ${row.task_id} has invalid status "${row.status}"`);
+  if (!isStatus(row.status) || !isOwnerType(row.owner_type)) {
+    throw new Error(`Reminder schedule for ${row.owner_type}:${row.owner_id} is invalid`);
   }
   return {
-    taskId: row.task_id,
+    ownerType: row.owner_type,
+    ownerId: row.owner_id,
     scheduledNotificationId: row.notification_id,
     reminderScheduleStatus: row.status,
     reminderScheduledAt: row.scheduled_at,
@@ -49,22 +57,26 @@ function toSchedule(row: ReminderScheduleRow): ReminderSchedule {
 
 export function createReminderScheduleRepository(db: SqlExecutor): ReminderScheduleRepository {
   return {
-    async get(taskId) {
-      const row = await db.get<ReminderScheduleRow>(`${SELECT} WHERE task_id = ?`, [taskId]);
+    async get(ownerType, ownerId) {
+      const row = await db.get<ReminderScheduleRow>(
+        `${SELECT} WHERE owner_type = ? AND owner_id = ?`,
+        [ownerType, ownerId],
+      );
       return row === null ? null : toSchedule(row);
     },
 
     async listAll() {
-      const rows = await db.all<ReminderScheduleRow>(`${SELECT} ORDER BY task_id`);
+      const rows = await db.all<ReminderScheduleRow>(`${SELECT} ORDER BY owner_type, owner_id`);
       return rows.map(toSchedule);
     },
 
     async save(schedule) {
       await db.run(
         `INSERT INTO reminder_schedules
-           (task_id, status, notification_id, fire_at, fingerprint, scheduled_at, error, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT (task_id) DO UPDATE SET
+           (owner_type, owner_id, status, notification_id, fire_at, fingerprint,
+            scheduled_at, error, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (owner_type, owner_id) DO UPDATE SET
            status = excluded.status,
            notification_id = excluded.notification_id,
            fire_at = excluded.fire_at,
@@ -73,7 +85,8 @@ export function createReminderScheduleRepository(db: SqlExecutor): ReminderSched
            error = excluded.error,
            updated_at = excluded.updated_at`,
         [
-          schedule.taskId,
+          schedule.ownerType,
+          schedule.ownerId,
           schedule.reminderScheduleStatus,
           schedule.scheduledNotificationId,
           schedule.fireAt,
@@ -85,8 +98,11 @@ export function createReminderScheduleRepository(db: SqlExecutor): ReminderSched
       );
     },
 
-    async delete(taskId) {
-      await db.run('DELETE FROM reminder_schedules WHERE task_id = ?', [taskId]);
+    async delete(ownerType, ownerId) {
+      await db.run('DELETE FROM reminder_schedules WHERE owner_type = ? AND owner_id = ?', [
+        ownerType,
+        ownerId,
+      ]);
     },
   };
 }

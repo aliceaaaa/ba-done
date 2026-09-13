@@ -1,9 +1,15 @@
 export * from './model/types';
 export {
+  eventDetailsPath,
+  eventReminderNotificationId,
+  parseEventReminderPayload,
+  parseOwnedReminderPayload,
   parseReminderPayload,
+  planEventReminder,
   planReminder,
   reminderLocalDateTime,
   reminderNotificationId,
+  reminderOwnerKey,
   resolveReminderFireAt,
   taskDetailsPath,
 } from './lib/reminder-plan';

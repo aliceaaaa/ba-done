@@ -7,9 +7,11 @@ export type {
   ReminderSyncOutcome,
 } from './model/reminder-coordinator';
 export { createSyncedTaskService } from './model/synced-task-service';
+export { createSyncedCalendarEventService } from './model/synced-calendar-event-service';
 export {
   changePriorityPath,
   createNotificationResponseHandler,
+  eventRemindLaterPath,
   remindLaterPath,
 } from './model/notification-response-handler';
 export type {
@@ -21,5 +23,6 @@ export { ReminderLifecycle } from './ui/reminder-lifecycle';
 export { ReminderNoticeHost, REMINDER_NOTICES } from './ui/reminder-notice-host';
 export { ReminderStatus, REMINDER_STATUS_TEXT } from './ui/reminder-status';
 export { RemindLaterScreen } from './ui/remind-later-screen';
+export type { SnoozeHandler } from './ui/remind-later-screen';
 export { ChangePriorityScreen } from './ui/change-priority-screen';
 export { ReminderSettingsScreen, EXACT_ALARM_NOTE } from './ui/reminder-settings-screen';

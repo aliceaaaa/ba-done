@@ -472,7 +472,7 @@ describe('TaskService', () => {
     });
 
     it('keeps the stored time zone until the reminder itself changes', async () => {
-      const task = await create({ reminder: { type: 'dayPeriod', period: 'morning' } });
+      const task = await create({ reminder: { type: 'dayPeriod', period: 'night' } });
       const tokyo = buildService(db, { timeZone: 'Asia/Tokyo', idPrefix: 'tokyo' });
 
       const renamed = unwrap(await tokyo.updateTask(task.id, { title: 'Renamed' }));
@@ -483,7 +483,7 @@ describe('TaskService', () => {
       );
       const cleared = unwrap(await tokyo.updateTask(task.id, { reminder: null }));
 
-      expect(renamed.reminder).toEqual({ type: 'dayPeriod', period: 'morning', timeZone: BERLIN });
+      expect(renamed.reminder).toEqual({ type: 'dayPeriod', period: 'night', timeZone: BERLIN });
       expect(rescheduled.reminder).toEqual({
         type: 'exact',
         localDateTime: '2026-09-11T21:00',
@@ -872,6 +872,80 @@ describe('TaskService', () => {
         issues: [{ field: 'reminder', message: 'Choose a reminder time in the future' }],
       });
       expect(await service.getDeck(TODAY)).toEqual([]);
+    });
+
+    it('rejects a day-period reminder for today whose time already passed', async () => {
+      const error = unwrapError(
+        await service.createTask({
+          title: 'Breakfast',
+          scheduledDate: TODAY,
+          priority: 5,
+          reminder: { type: 'dayPeriod', period: 'morning' },
+        }),
+      );
+
+      expect(error).toMatchObject({
+        type: 'ValidationError',
+        issues: [{ field: 'reminder', message: 'Choose a reminder time in the future' }],
+      });
+      expect(await service.getDeck(TODAY)).toEqual([]);
+      expect(await service.getDeck(TOMORROW)).toEqual([]);
+    });
+
+    it('saves a day-period reminder for today that is still ahead or for a future date', async () => {
+      const afternoon = await create({ reminder: { type: 'dayPeriod', period: 'afternoon' } });
+      const tomorrowMorning = await create({
+        scheduledDate: TOMORROW,
+        reminder: { type: 'dayPeriod', period: 'morning' },
+      });
+
+      expect(afternoon.reminder).toMatchObject({ type: 'dayPeriod', period: 'afternoon' });
+      expect(tomorrowMorning).toMatchObject({
+        scheduledDate: TOMORROW,
+        reminder: { type: 'dayPeriod', period: 'morning' },
+      });
+    });
+
+    it('uses the injected day-period times', async () => {
+      const early = createTaskService({
+        db,
+        now: createClock(BERLIN_MORNING),
+        generateId: createIdGenerator('early'),
+        timeZone: () => BERLIN,
+        dayPeriodTimes: async () => ({
+          morning: '11:00',
+          afternoon: '13:00',
+          evening: '18:00',
+          night: '21:00',
+        }),
+      });
+
+      expect(
+        unwrap(
+          await early.createTask({
+            title: 'Late breakfast',
+            scheduledDate: TODAY,
+            priority: 6,
+            reminder: { type: 'dayPeriod', period: 'morning' },
+          }),
+        ).reminder,
+      ).toMatchObject({ period: 'morning' });
+    });
+
+    it('blocks moving a task with a passed day-period reminder onto today', async () => {
+      const task = await create({
+        scheduledDate: TOMORROW,
+        reminder: { type: 'dayPeriod', period: 'morning' },
+      });
+
+      const error = unwrapError(
+        await service.editTask(task.id, {
+          placement: { kind: 'ranked', scheduledDate: TODAY, priority: 5 },
+        }),
+      );
+
+      expect(error).toMatchObject({ type: 'ValidationError', issues: [{ field: 'reminder' }] });
+      expect(unwrap(await service.getTask(task.id))).toEqual(task);
     });
 
     it('rejects changing a reminder to a past time without saving', async () => {

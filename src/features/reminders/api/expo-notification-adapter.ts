@@ -4,6 +4,8 @@ import { Linking, Platform } from 'react-native';
 import { UI_STRINGS } from '@/shared/config/ui-strings';
 
 import {
+  EVENT_REMINDER_ACTIONS,
+  EVENT_REMINDER_CATEGORY_ID,
   REMINDER_ACTIONS,
   REMINDER_CATEGORY_ID,
   REMINDER_CHANNEL_ID,
@@ -57,8 +59,8 @@ export function createExpoNotificationAdapter(): NotificationAdapter {
       });
       if (Platform.OS === 'android') {
         await Notifications.setNotificationChannelAsync(REMINDER_CHANNEL_ID, {
-          name: 'Task reminders',
-          description: 'Reminders for tasks you planned',
+          name: 'Reminders',
+          description: 'Reminders for your tasks and events',
           importance: Notifications.AndroidImportance.HIGH,
         });
       }
@@ -85,6 +87,18 @@ export function createExpoNotificationAdapter(): NotificationAdapter {
           options: opensApp,
         },
       ]);
+      await Notifications.setNotificationCategoryAsync(EVENT_REMINDER_CATEGORY_ID, [
+        {
+          identifier: EVENT_REMINDER_ACTIONS.open,
+          buttonTitle: UI_STRINGS.eventReminderActions.open,
+          options: opensApp,
+        },
+        {
+          identifier: EVENT_REMINDER_ACTIONS.remindLater,
+          buttonTitle: UI_STRINGS.eventReminderActions.remindLater,
+          options: opensApp,
+        },
+      ]);
     },
 
     async getPermission() {
@@ -106,7 +120,7 @@ export function createExpoNotificationAdapter(): NotificationAdapter {
           title: request.title,
           body: request.body,
           data: { ...request.data },
-          categoryIdentifier: REMINDER_CATEGORY_ID,
+          categoryIdentifier: request.categoryId,
           sound: true,
         },
         trigger: {

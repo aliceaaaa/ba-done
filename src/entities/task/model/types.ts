@@ -7,6 +7,15 @@ export type TaskStatus = (typeof TASK_STATUSES)[number];
 export const DAY_PERIODS = ['morning', 'afternoon', 'evening', 'night'] as const;
 export type DayPeriod = (typeof DAY_PERIODS)[number];
 
+export type DayPeriodTimes = Record<DayPeriod, string>;
+
+export const DEFAULT_DAY_PERIOD_TIMES: DayPeriodTimes = {
+  morning: '09:00',
+  afternoon: '13:00',
+  evening: '18:00',
+  night: '21:00',
+};
+
 export const PLACEMENT_TYPES = ['ranked', 'carryOver'] as const;
 export type PlacementType = (typeof PLACEMENT_TYPES)[number];
 

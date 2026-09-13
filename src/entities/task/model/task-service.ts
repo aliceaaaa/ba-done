@@ -35,6 +35,7 @@ import {
 } from './task-errors';
 import { validateDetails, validateRankedSlot } from './task-validation';
 import {
+  DEFAULT_DAY_PERIOD_TIMES,
   FUTURE_PLACEMENT,
   PRIORITY_MAX,
   PRIORITY_MIN,
@@ -61,6 +62,7 @@ import {
   type TaskDetails,
   type TaskDetailsInput,
   type ReminderSnoozedEvent,
+  type DayPeriodTimes,
   type TaskEvent,
   type TaskReminder,
   type ThingToTake,
@@ -73,6 +75,7 @@ export type TaskServiceDeps = {
   now: () => Date;
   generateId: () => string;
   timeZone: () => string;
+  dayPeriodTimes?: () => Promise<DayPeriodTimes>;
 };
 
 export type TaskResult<T> = Result<T, TaskError>;
@@ -105,6 +108,7 @@ export type TaskService = {
   getTask(id: string): Promise<TaskResult<Task>>;
   getDeck(scheduledDate: string): Promise<ScheduledTask[]>;
   getFuturePool(): Promise<FutureTask[]>;
+  getScheduledInRange(fromDate: string, toDate: string): Promise<ScheduledTask[]>;
   getHistory(id: string): Promise<TaskEvent[]>;
   claimReturnNotices(scheduledDate: string): Promise<string[]>;
   getTasksWithReminders(): Promise<Task[]>;
@@ -236,15 +240,25 @@ function shiftExactReminder(reminder: TaskReminder | null, days: number): TaskRe
   return { ...reminder, localDateTime: shiftLocalDateTime(reminder.localDateTime, days) };
 }
 
-function reminderInPastIssues(reminder: TaskReminder | null, instant: Date): ValidationIssue[] {
-  if (
-    reminder?.type !== 'exact' ||
-    !isValidLocalDateTime(reminder.localDateTime) ||
-    !isValidTimeZone(reminder.timeZone)
-  ) {
+function reminderInPastIssues(
+  reminder: TaskReminder | null,
+  scheduledDate: string | null,
+  times: DayPeriodTimes,
+  instant: Date,
+): ValidationIssue[] {
+  if (reminder === null || !isValidTimeZone(reminder.timeZone)) {
     return [];
   }
-  const fireAt = zonedDateTimeToInstant(reminder.localDateTime, reminder.timeZone);
+  const localDateTime =
+    reminder.type === 'exact'
+      ? reminder.localDateTime
+      : scheduledDate === null
+        ? null
+        : `${scheduledDate}T${times[reminder.period]}`;
+  if (localDateTime === null || !isValidLocalDateTime(localDateTime)) {
+    return [];
+  }
+  const fireAt = zonedDateTimeToInstant(localDateTime, reminder.timeZone);
   return fireAt.getTime() <= instant.getTime()
     ? [{ field: 'reminder', message: REMINDER_IN_PAST_MESSAGE }]
     : [];
@@ -351,8 +365,25 @@ async function writeRestored(repos: Repositories, task: Task): Promise<TaskResul
   return ok(task);
 }
 
-export function createTaskService({ db, now, generateId, timeZone }: TaskServiceDeps): TaskService {
+export function createTaskService({
+  db,
+  now,
+  generateId,
+  timeZone,
+  dayPeriodTimes = async () => DEFAULT_DAY_PERIOD_TIMES,
+}: TaskServiceDeps): TaskService {
   const timestamp = () => now().toISOString();
+
+  async function pastReminderIssues(
+    reminder: TaskReminder | null,
+    scheduledDate: string | null,
+    instant: Date = now(),
+  ): Promise<ValidationIssue[]> {
+    if (reminder === null) {
+      return [];
+    }
+    return reminderInPastIssues(reminder, scheduledDate, await dayPeriodTimes(), instant);
+  }
   const listeners = new Set<() => void>();
 
   function notifyChanged() {
@@ -482,6 +513,10 @@ export function createTaskService({ db, now, generateId, timeZone }: TaskService
       return createTaskRepository(db).listDeck(scheduledDate);
     },
 
+    getScheduledInRange(fromDate, toDate) {
+      return createTaskRepository(db).listScheduledInRange(fromDate, toDate);
+    },
+
     getFuturePool() {
       return createTaskRepository(db).listFuturePool();
     },
@@ -517,7 +552,7 @@ export function createTaskService({ db, now, generateId, timeZone }: TaskService
             return validated;
           }
           const instant = now();
-          const pastIssues = reminderInPastIssues(reminder, instant);
+          const pastIssues = await pastReminderIssues(reminder, task.scheduledDate, instant);
           if (pastIssues.length > 0) {
             return err(validationError(pastIssues));
           }
@@ -605,7 +640,11 @@ export function createTaskService({ db, now, generateId, timeZone }: TaskService
           return err(validationError([...issuesOf(slot), ...issuesOf(details)]));
         }
         const instant = now();
-        const pastIssues = reminderInPastIssues(details.value.reminder, instant);
+        const pastIssues = await pastReminderIssues(
+          details.value.reminder,
+          slot.value.scheduledDate,
+          instant,
+        );
         if (pastIssues.length > 0) {
           return err(validationError(pastIssues));
         }
@@ -658,7 +697,9 @@ export function createTaskService({ db, now, generateId, timeZone }: TaskService
         withTask(repos, id, async (task) => {
           const details = mergeDetails(task, patch, timeZone());
           const pastIssues =
-            patch.reminder === undefined ? [] : reminderInPastIssues(details.reminder, now());
+            patch.reminder === undefined
+              ? []
+              : await pastReminderIssues(details.reminder, task.scheduledDate);
           if (pastIssues.length > 0) {
             return err(validationError(pastIssues));
           }
@@ -678,10 +719,15 @@ export function createTaskService({ db, now, generateId, timeZone }: TaskService
             }
           }
           const details = mergeDetails(task, patch, timeZone());
+          const targetDate =
+            placement.kind === 'ranked' ? placement.scheduledDate : task.scheduledDate;
+          const reminderMoves =
+            patch.reminder !== undefined ||
+            (placement.kind === 'ranked' && placement.scheduledDate !== task.scheduledDate);
           const pastIssues =
-            patch.reminder === undefined || placement.kind === 'future'
+            !reminderMoves || placement.kind === 'future'
               ? []
-              : reminderInPastIssues(details.reminder, now());
+              : await pastReminderIssues(details.reminder, targetDate);
           if (pastIssues.length > 0) {
             return err(validationError(pastIssues));
           }

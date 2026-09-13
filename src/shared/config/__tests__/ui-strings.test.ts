@@ -17,6 +17,10 @@ describe('UI_STRINGS', () => {
         remindLater: 'Remind me later',
         changePriority: 'Change priority',
       },
+      eventReminderActions: {
+        open: 'Open',
+        remindLater: 'Remind me later',
+      },
     });
   });
 });

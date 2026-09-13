@@ -260,12 +260,97 @@ const addReminderScheduling: Migration = async (db) => {
   `);
 };
 
+const addCalendarEvents: Migration = async (db) => {
+  await db.exec(`
+    CREATE TABLE calendar_events (
+      id TEXT PRIMARY KEY NOT NULL,
+      title TEXT NOT NULL CHECK (length(trim(title)) > 0),
+      all_day INTEGER NOT NULL CHECK (all_day IN (0, 1)),
+      start_at TEXT,
+      end_at TEXT,
+      start_date TEXT CHECK (start_date IS NULL OR start_date IS date(start_date)),
+      end_date TEXT CHECK (end_date IS NULL OR end_date IS date(end_date)),
+      time_zone TEXT NOT NULL CHECK (length(time_zone) > 0),
+      description TEXT,
+      address TEXT,
+      travel_minutes INTEGER CHECK (
+        travel_minutes IS NULL OR (typeof(travel_minutes) = 'integer' AND travel_minutes >= 0)
+      ),
+      things_to_take TEXT NOT NULL DEFAULT '[]' CHECK (
+        json_valid(things_to_take) AND json_type(things_to_take) = 'array'
+      ),
+      reminder_local_date_time TEXT CHECK (
+        reminder_local_date_time IS NULL
+        OR reminder_local_date_time IS strftime('%Y-%m-%dT%H:%M', reminder_local_date_time)
+      ),
+      reminder_time_zone TEXT,
+      source TEXT NOT NULL DEFAULT 'internal' CHECK (source IN ('internal')),
+      external_calendar_id TEXT,
+      external_event_id TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      deleted_at TEXT,
+      CHECK (
+        (all_day = 0 AND start_at IS NOT NULL AND end_at IS NOT NULL AND start_at < end_at
+          AND start_date IS NULL AND end_date IS NULL)
+        OR (all_day = 1 AND start_date IS NOT NULL AND end_date IS NOT NULL
+          AND start_date <= end_date AND start_at IS NULL AND end_at IS NULL)
+      ),
+      CHECK ((reminder_local_date_time IS NULL) = (reminder_time_zone IS NULL))
+    );
+
+    CREATE INDEX calendar_events_timed_idx
+      ON calendar_events (start_at, end_at)
+      WHERE all_day = 0 AND deleted_at IS NULL;
+
+    CREATE INDEX calendar_events_all_day_idx
+      ON calendar_events (start_date, end_date)
+      WHERE all_day = 1 AND deleted_at IS NULL;
+
+    CREATE TABLE reminder_schedules_next (
+      owner_type TEXT NOT NULL CHECK (owner_type IN ('task', 'calendarEvent')),
+      owner_id TEXT NOT NULL,
+      status TEXT NOT NULL CHECK (
+        status IN ('notScheduled', 'scheduled', 'permissionDenied', 'failed')
+      ),
+      notification_id TEXT,
+      fire_at TEXT,
+      fingerprint TEXT,
+      scheduled_at TEXT,
+      error TEXT,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (owner_type, owner_id),
+      CHECK ((status = 'scheduled') = (notification_id IS NOT NULL AND scheduled_at IS NOT NULL))
+    );
+
+    INSERT INTO reminder_schedules_next (
+      owner_type, owner_id, status, notification_id, fire_at, fingerprint,
+      scheduled_at, error, updated_at
+    )
+    SELECT
+      'task', task_id, status, notification_id, fire_at, fingerprint,
+      scheduled_at, error, updated_at
+    FROM reminder_schedules;
+
+    DROP TABLE reminder_schedules;
+
+    ALTER TABLE reminder_schedules_next RENAME TO reminder_schedules;
+
+    ALTER TABLE notification_responses RENAME COLUMN task_id TO owner_id;
+    ALTER TABLE notification_responses ADD COLUMN owner_type TEXT CHECK (
+      owner_type IS NULL OR owner_type IN ('task', 'calendarEvent')
+    );
+    UPDATE notification_responses SET owner_type = 'task' WHERE owner_id IS NOT NULL;
+  `);
+};
+
 export const migrations: readonly Migration[] = [
   createTasksSchema,
   addCompletionEvents,
   addSoftDeleteAndCheckableThings,
   addCarryOverReturnNotices,
   addReminderScheduling,
+  addCalendarEvents,
 ];
 
 export async function migrateDatabase(

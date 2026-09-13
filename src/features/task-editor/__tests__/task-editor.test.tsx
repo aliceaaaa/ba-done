@@ -103,6 +103,46 @@ describe('TaskEditor', () => {
     });
   });
 
+  it('blocks a time-of-day reminder for today once that time has passed', async () => {
+    await renderApp(service, `/task/new?date=${TODAY}`);
+    await screen.findByTestId('task-editor');
+
+    await fireEvent.changeText(screen.getByLabelText('Title'), 'Breakfast');
+    await fireEvent.press(await screen.findByTestId('priority-option-6'));
+    await fireEvent.press(screen.getByRole('radio', { name: 'At a time of day' }));
+    await fireEvent.press(
+      within(screen.getAllByLabelText('Reminder time of day')[0]!).getByRole('radio', {
+        name: 'Morning',
+      }),
+    );
+    await save();
+
+    expect(await screen.findByText('Choose a reminder time in the future')).toBeTruthy();
+    expect(await service.getDeck(TODAY)).toEqual([]);
+    expect(screen.getByTestId('task-editor')).toBeTruthy();
+  });
+
+  it('saves a time-of-day reminder on a future date', async () => {
+    await renderApp(service, `/task/new?date=${TOMORROW}`);
+    await screen.findByTestId('task-editor');
+
+    await fireEvent.changeText(screen.getByLabelText('Title'), 'Breakfast');
+    await fireEvent.press(await screen.findByTestId('priority-option-6'));
+    await fireEvent.press(screen.getByRole('radio', { name: 'At a time of day' }));
+    await fireEvent.press(
+      within(screen.getAllByLabelText('Reminder time of day')[0]!).getByRole('radio', {
+        name: 'Morning',
+      }),
+    );
+    await save();
+
+    await waitFor(async () => expect(await service.getDeck(TOMORROW)).toHaveLength(1));
+    expect((await service.getDeck(TOMORROW))[0]?.reminder).toMatchObject({
+      type: 'dayPeriod',
+      period: 'morning',
+    });
+  });
+
   it('does not offer a reminder with a date for a Future task', async () => {
     await renderApp(service, '/task/new?placement=future');
     await screen.findByTestId('task-editor');

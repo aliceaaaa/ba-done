@@ -1,13 +1,18 @@
 import type { SqlDatabase } from '@/database/sql-database';
+import type { CalendarEvent, CalendarEventService } from '@/entities/calendar-event';
 import {
   REMINDER_SCHEDULE_ERRORS,
   buildSnoozeOptions,
   createAppSettingsRepository,
   createReminderScheduleRepository,
-  parseReminderPayload,
+  parseOwnedReminderPayload,
+  planEventReminder,
   planReminder,
+  reminderOwnerKey,
   type DayPeriodTimes,
   type ReminderDisplayState,
+  type ReminderOwner,
+  type ReminderOwnerType,
   type ReminderPlan,
   type ReminderSchedule,
   type SnoozeOption,
@@ -23,8 +28,7 @@ import type {
 
 export type ReminderSyncOutcome = 'none' | 'scheduled' | 'permissionDenied' | 'failed' | 'inPast';
 
-export type ReminderSyncEvent = {
-  taskId: string;
+export type ReminderSyncEvent = ReminderOwner & {
   outcome: ReminderSyncOutcome;
   requested: boolean;
 };
@@ -36,6 +40,7 @@ export type SyncOptions = {
 export type ReminderCoordinatorDeps = {
   db: SqlDatabase;
   service: TaskService;
+  events: CalendarEventService;
   adapter: NotificationAdapter;
   now: () => Date;
   timeZone: () => string;
@@ -43,10 +48,13 @@ export type ReminderCoordinatorDeps = {
 
 export type ReminderCoordinator = {
   syncTask(taskId: string, options?: SyncOptions): Promise<ReminderSyncOutcome>;
+  syncEvent(eventId: string, options?: SyncOptions): Promise<ReminderSyncOutcome>;
   reconcile(): Promise<void>;
   refresh(): Promise<void>;
   getSchedule(taskId: string): Promise<ReminderSchedule | null>;
+  getOwnerSchedule(ownerType: ReminderOwnerType, ownerId: string): Promise<ReminderSchedule | null>;
   getDisplayState(task: Task): Promise<ReminderDisplayState>;
+  getEventDisplayState(event: CalendarEvent): Promise<ReminderDisplayState>;
   getDayPeriodTimes(): Promise<DayPeriodTimes>;
   setDayPeriodTime(period: DayPeriod, time: string): Promise<void>;
   getSnoozeOptions(): Promise<SnoozeOption[]>;
@@ -62,6 +70,10 @@ type ApplyOptions = {
   trustExistingRecord: boolean;
 };
 
+type OwnedPlan = ReminderOwner & {
+  plan: ReminderPlan;
+};
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -69,6 +81,7 @@ function errorMessage(error: unknown): string {
 export function createReminderCoordinator({
   db,
   service,
+  events,
   adapter,
   now,
   timeZone,
@@ -90,31 +103,39 @@ export function createReminderCoordinator({
     }
   }
 
-  async function loadTask(taskId: string): Promise<Task | null> {
-    const result = await service.getTask(taskId);
-    return result.ok ? result.value : null;
+  async function planFor(owner: ReminderOwner): Promise<ReminderPlan> {
+    if (owner.ownerType === 'task') {
+      const result = await service.getTask(owner.ownerId);
+      return planReminder(
+        result.ok ? result.value : null,
+        await settings.getDayPeriodTimes(),
+        now(),
+      );
+    }
+    const result = await events.getEvent(owner.ownerId);
+    return planEventReminder(result.ok ? result.value : null, now(), timeZone());
   }
 
   async function save(
-    taskId: string,
-    fields: Omit<ReminderSchedule, 'taskId' | 'updatedAt'>,
+    owner: ReminderOwner,
+    fields: Omit<ReminderSchedule, 'ownerType' | 'ownerId' | 'updatedAt'>,
   ): Promise<void> {
-    await schedules.save({ ...fields, taskId, updatedAt: now().toISOString() });
+    await schedules.save({ ...fields, ...owner, updatedAt: now().toISOString() });
   }
 
   async function cancelExisting(existing: ReminderSchedule | null): Promise<void> {
-    if (existing?.scheduledNotificationId !== null && existing !== null) {
+    if (existing !== null && existing.scheduledNotificationId !== null) {
       await adapter.cancel(existing.scheduledNotificationId);
     }
   }
 
   async function applyPlan(
-    taskId: string,
+    owner: ReminderOwner,
     plan: ReminderPlan,
     permission: () => Promise<NotificationPermission>,
     options: ApplyOptions,
   ): Promise<ReminderSyncOutcome> {
-    const existing = await schedules.get(taskId);
+    const existing = await schedules.get(owner.ownerType, owner.ownerId);
 
     if (plan.kind === 'none') {
       if (existing === null) {
@@ -122,10 +143,10 @@ export function createReminderCoordinator({
       }
       try {
         await cancelExisting(existing);
-        await schedules.delete(taskId);
+        await schedules.delete(owner.ownerType, owner.ownerId);
         return 'none';
       } catch (error) {
-        await save(taskId, {
+        await save(owner, {
           scheduledNotificationId: null,
           reminderScheduleStatus: 'failed',
           reminderScheduledAt: null,
@@ -141,7 +162,7 @@ export function createReminderCoordinator({
       try {
         await cancelExisting(existing);
       } catch (error) {
-        await save(taskId, {
+        await save(owner, {
           scheduledNotificationId: null,
           reminderScheduleStatus: 'failed',
           reminderScheduledAt: null,
@@ -151,7 +172,7 @@ export function createReminderCoordinator({
         });
         return 'failed';
       }
-      await save(taskId, {
+      await save(owner, {
         scheduledNotificationId: null,
         reminderScheduleStatus: 'notScheduled',
         reminderScheduledAt: null,
@@ -177,7 +198,7 @@ export function createReminderCoordinator({
       try {
         await cancelExisting(existing);
       } catch {
-        await save(taskId, {
+        await save(owner, {
           scheduledNotificationId: null,
           reminderScheduleStatus: 'failed',
           reminderScheduledAt: null,
@@ -187,7 +208,7 @@ export function createReminderCoordinator({
         });
         return 'failed';
       }
-      await save(taskId, {
+      await save(owner, {
         scheduledNotificationId: null,
         reminderScheduleStatus: 'permissionDenied',
         reminderScheduledAt: null,
@@ -205,12 +226,13 @@ export function createReminderCoordinator({
       await cancelExisting(existing);
       const notificationId = await adapter.schedule({
         identifier: plan.identifier,
+        categoryId: plan.categoryId,
         title: plan.title,
         body: plan.body,
         fireAt: plan.fireAt,
         data: plan.payload,
       });
-      await save(taskId, {
+      await save(owner, {
         scheduledNotificationId: notificationId,
         reminderScheduleStatus: 'scheduled',
         reminderScheduledAt: now().toISOString(),
@@ -220,7 +242,7 @@ export function createReminderCoordinator({
       });
       return 'scheduled';
     } catch (error) {
-      await save(taskId, {
+      await save(owner, {
         scheduledNotificationId: null,
         reminderScheduleStatus: 'failed',
         reminderScheduledAt: null,
@@ -232,54 +254,72 @@ export function createReminderCoordinator({
     }
   }
 
-  async function reconcileInner(): Promise<void> {
+  async function collectPlans(): Promise<Map<string, OwnedPlan>> {
     const times = await settings.getDayPeriodTimes();
     const instant = now();
-    const tasks = await service.getTasksWithReminders();
-    const plans = new Map(tasks.map((task) => [task.id, planReminder(task, times, instant)]));
+    const zone = timeZone();
+    const plans = new Map<string, OwnedPlan>();
+    for (const task of await service.getTasksWithReminders()) {
+      const owner: ReminderOwner = { ownerType: 'task', ownerId: task.id };
+      plans.set(reminderOwnerKey(owner), { ...owner, plan: planReminder(task, times, instant) });
+    }
+    for (const event of await events.getEventsWithReminders()) {
+      const owner: ReminderOwner = { ownerType: 'calendarEvent', ownerId: event.id };
+      plans.set(reminderOwnerKey(owner), {
+        ...owner,
+        plan: planEventReminder(event, instant, zone),
+      });
+    }
+    return plans;
+  }
+
+  async function reconcileInner(): Promise<void> {
+    const plans = await collectPlans();
     const permission = await adapter.getPermission();
     const ours = new Map<string, ScheduledNotification>();
 
     for (const notification of await adapter.listScheduled()) {
-      const payload = parseReminderPayload(notification.data);
-      if (payload === null) {
+      const owner = parseOwnedReminderPayload(notification.data);
+      if (owner === null) {
         continue;
       }
-      const plan = plans.get(payload.taskId);
+      const key = reminderOwnerKey(owner);
+      const plan = plans.get(key)?.plan;
       const isWanted =
         plan?.kind === 'notify' &&
         permission.status === 'granted' &&
         plan.identifier === notification.identifier &&
-        !ours.has(payload.taskId);
+        !ours.has(key);
       if (isWanted) {
-        ours.set(payload.taskId, notification);
+        ours.set(key, notification);
       } else {
         await adapter.cancel(notification.identifier);
       }
     }
 
     for (const record of await schedules.listAll()) {
-      if (!plans.has(record.taskId)) {
-        await schedules.delete(record.taskId);
+      if (!plans.has(reminderOwnerKey(record))) {
+        await schedules.delete(record.ownerType, record.ownerId);
       }
     }
 
-    for (const task of tasks) {
-      const plan = plans.get(task.id) ?? { kind: 'none' };
-      const present = ours.get(task.id);
-      const presentPayload = present === undefined ? null : parseReminderPayload(present.data);
+    for (const [key, owned] of plans) {
+      const owner: ReminderOwner = { ownerType: owned.ownerType, ownerId: owned.ownerId };
+      const { plan } = owned;
+      const present = ours.get(key);
+      const presentOwner = present === undefined ? null : parseOwnedReminderPayload(present.data);
       if (
         plan.kind === 'notify' &&
         present !== undefined &&
-        presentPayload?.fingerprint === plan.payload.fingerprint
+        presentOwner?.fingerprint === plan.payload.fingerprint
       ) {
-        const existing = await schedules.get(task.id);
+        const existing = await schedules.get(owner.ownerType, owner.ownerId);
         if (
           existing?.reminderScheduleStatus !== 'scheduled' ||
           existing.scheduledNotificationId !== present.identifier ||
           existing.fingerprint !== plan.payload.fingerprint
         ) {
-          await save(task.id, {
+          await save(owner, {
             scheduledNotificationId: present.identifier,
             reminderScheduleStatus: 'scheduled',
             reminderScheduledAt: existing?.reminderScheduledAt ?? now().toISOString(),
@@ -290,7 +330,7 @@ export function createReminderCoordinator({
         }
         continue;
       }
-      await applyPlan(task.id, plan, async () => permission, { trustExistingRecord: false });
+      await applyPlan(owner, plan, async () => permission, { trustExistingRecord: false });
     }
   }
 
@@ -306,29 +346,58 @@ export function createReminderCoordinator({
     }
   }
 
+  function syncOwner(owner: ReminderOwner, options: SyncOptions): Promise<ReminderSyncOutcome> {
+    return exclusive(async () => {
+      const requested = options.requestPermission ?? false;
+      const plan = await planFor(owner);
+      let grantedNow = false;
+      const permission = async () => {
+        const current = await adapter.getPermission();
+        if (current.status !== 'undetermined' || !requested) {
+          return current;
+        }
+        const answer = await adapter.requestPermission();
+        grantedNow = answer.status === 'granted';
+        return answer;
+      };
+      const outcome = await applyPlan(owner, plan, permission, { trustExistingRecord: true });
+      if (grantedNow) {
+        await reconcileInner();
+      }
+      emit({ ...owner, outcome, requested });
+      return outcome;
+    });
+  }
+
+  function displayStateFor(
+    schedule: ReminderSchedule | null,
+    plan: ReminderPlan,
+  ): ReminderDisplayState {
+    if (plan.kind === 'none') {
+      return { kind: 'none' };
+    }
+    if (plan.kind === 'inPast') {
+      return { kind: 'inPast' };
+    }
+    switch (schedule?.reminderScheduleStatus) {
+      case 'scheduled':
+        return { kind: 'scheduled', fireAt: schedule.fireAt ?? '' };
+      case 'permissionDenied':
+        return { kind: 'permissionDenied' };
+      case 'failed':
+        return { kind: 'failed' };
+      default:
+        return { kind: 'pending' };
+    }
+  }
+
   return {
     syncTask(taskId, options = {}) {
-      return exclusive(async () => {
-        const requested = options.requestPermission ?? false;
-        const task = await loadTask(taskId);
-        const plan = planReminder(task, await settings.getDayPeriodTimes(), now());
-        let grantedNow = false;
-        const permission = async () => {
-          const current = await adapter.getPermission();
-          if (current.status !== 'undetermined' || !requested) {
-            return current;
-          }
-          const answer = await adapter.requestPermission();
-          grantedNow = answer.status === 'granted';
-          return answer;
-        };
-        const outcome = await applyPlan(taskId, plan, permission, { trustExistingRecord: true });
-        if (grantedNow) {
-          await reconcileInner();
-        }
-        emit({ taskId, outcome, requested });
-        return outcome;
-      });
+      return syncOwner({ ownerType: 'task', ownerId: taskId }, options);
+    },
+
+    syncEvent(eventId, options = {}) {
+      return syncOwner({ ownerType: 'calendarEvent', ownerId: eventId }, options);
     },
 
     reconcile() {
@@ -343,28 +412,21 @@ export function createReminderCoordinator({
     },
 
     getSchedule(taskId) {
-      return schedules.get(taskId);
+      return schedules.get('task', taskId);
+    },
+
+    getOwnerSchedule(ownerType, ownerId) {
+      return schedules.get(ownerType, ownerId);
     },
 
     async getDisplayState(task) {
-      if (task.reminder === null || task.scheduledDate === null || task.status !== 'active') {
-        return { kind: 'none' };
-      }
       const plan = planReminder(task, await settings.getDayPeriodTimes(), now());
-      if (plan.kind === 'inPast') {
-        return { kind: 'inPast' };
-      }
-      const schedule = await schedules.get(task.id);
-      switch (schedule?.reminderScheduleStatus) {
-        case 'scheduled':
-          return { kind: 'scheduled', fireAt: schedule.fireAt ?? '' };
-        case 'permissionDenied':
-          return { kind: 'permissionDenied' };
-        case 'failed':
-          return { kind: 'failed' };
-        default:
-          return { kind: 'pending' };
-      }
+      return displayStateFor(await schedules.get('task', task.id), plan);
+    },
+
+    async getEventDisplayState(event) {
+      const plan = planEventReminder(event, now(), timeZone());
+      return displayStateFor(await schedules.get('calendarEvent', event.id), plan);
     },
 
     getDayPeriodTimes() {

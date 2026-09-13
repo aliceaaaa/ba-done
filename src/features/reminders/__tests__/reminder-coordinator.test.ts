@@ -92,8 +92,27 @@ describe('ReminderCoordinator', () => {
       expect(app.adapter.calls.schedule).toEqual([]);
     });
 
-    it('keeps a day-period reminder that already passed as not scheduled', async () => {
-      const task = await create({ reminder: { type: 'dayPeriod', period: 'morning' } });
+    it('blocks saving a day-period reminder for today that already passed', async () => {
+      const result = await app.service.createTask({
+        title: 'Too late',
+        scheduledDate: TODAY,
+        priority: 5,
+        reminder: { type: 'dayPeriod', period: 'morning' },
+      });
+
+      expect(result).toMatchObject({
+        ok: false,
+        error: { issues: [{ field: 'reminder', message: 'Choose a reminder time in the future' }] },
+      });
+      expect(await app.service.getDeck(TODAY)).toEqual([]);
+      expect(app.adapter.calls.schedule).toEqual([]);
+    });
+
+    it('keeps a saved day-period reminder that later falls into the past as not scheduled', async () => {
+      const task = await create({ reminder: { type: 'dayPeriod', period: 'evening' } });
+      expect(app.adapter.scheduled.size).toBe(1);
+
+      await app.coordinator.setDayPeriodTime('evening', '09:00');
 
       expect(app.adapter.scheduled.size).toBe(0);
       expect(await app.coordinator.getSchedule(task.id)).toMatchObject({

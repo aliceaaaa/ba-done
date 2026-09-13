@@ -1,10 +1,16 @@
 import { Stack } from 'expo-router';
 import { act, fireEvent, renderRouter, screen } from 'expo-router/testing-library';
+import type { ReactNode } from 'react';
 import { Alert, StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
+import CalendarRoute from '@/app/(tabs)/calendar';
 import TodayRoute from '@/app/(tabs)/index';
 import SettingsRoute from '@/app/(tabs)/settings';
+import EditEventRoute from '@/app/event/[id]/edit';
+import EventDetailsRoute from '@/app/event/[id]/index';
+import EventRemindLaterRoute from '@/app/event/[id]/remind-later';
+import NewEventRoute from '@/app/event/new';
 import FutureRoute from '@/app/future';
 import EditTaskRoute from '@/app/task/[id]/edit';
 import TaskDetailsRoute from '@/app/task/[id]/index';
@@ -18,6 +24,13 @@ import {
   type NodeSqliteDatabase,
 } from '@/database/testing/node-sqlite-database';
 import {
+  CalendarEventServiceProvider,
+  createCalendarEventService,
+  type CalendarEventService,
+  type EventResult,
+} from '@/entities/calendar-event';
+import { createAppSettingsRepository } from '@/entities/reminder';
+import {
   createTaskService,
   TaskServiceProvider,
   type TaskResult,
@@ -29,6 +42,7 @@ import {
   ReminderProvider,
   createNotificationResponseHandler,
   createReminderCoordinator,
+  createSyncedCalendarEventService,
   createSyncedTaskService,
   type NotificationPermission,
   type NotificationResponseHandler,
@@ -66,17 +80,35 @@ export function createTestClock(start: string = TEST_START): () => Date {
   };
 }
 
-export function createTestService(db: SqlDatabase, options: TestServiceOptions = {}): TaskService {
+function createIdGenerator(prefix: string): () => string {
   let counter = 0;
-  const prefix = options.idPrefix ?? 'id';
+  return () => {
+    counter += 1;
+    return `${prefix}-${counter}`;
+  };
+}
+
+export function createTestService(db: SqlDatabase, options: TestServiceOptions = {}): TaskService {
   const zone = options.timeZone ?? TEST_TIME_ZONE;
+  const settings = createAppSettingsRepository(db);
   return createTaskService({
     db,
     now: options.now ?? createTestClock(options.start),
-    generateId: () => {
-      counter += 1;
-      return `${prefix}-${counter}`;
-    },
+    generateId: createIdGenerator(options.idPrefix ?? 'id'),
+    timeZone: () => zone,
+    dayPeriodTimes: () => settings.getDayPeriodTimes(),
+  });
+}
+
+export function createTestEventService(
+  db: SqlDatabase,
+  options: TestServiceOptions = {},
+): CalendarEventService {
+  const zone = options.timeZone ?? TEST_TIME_ZONE;
+  return createCalendarEventService({
+    db,
+    now: options.now ?? createTestClock(options.start),
+    generateId: createIdGenerator(options.idPrefix ?? 'event'),
     timeZone: () => zone,
   });
 }
@@ -84,6 +116,8 @@ export function createTestService(db: SqlDatabase, options: TestServiceOptions =
 export type TestReminders = {
   raw: TaskService;
   service: TaskService;
+  rawEvents: CalendarEventService;
+  events: CalendarEventService;
   adapter: FakeNotificationAdapter;
   coordinator: ReminderCoordinator;
   handler: NotificationResponseHandler;
@@ -103,16 +137,18 @@ export function createTestReminders(
 ): TestReminders {
   const now = createTestClock(options.start);
   let zone = options.timeZone ?? TEST_TIME_ZONE;
+  const settings = createAppSettingsRepository(db);
   const raw = createTaskService({
     db,
     now,
-    generateId: (() => {
-      let counter = 0;
-      return () => {
-        counter += 1;
-        return `id-${counter}`;
-      };
-    })(),
+    generateId: createIdGenerator('id'),
+    timeZone: () => zone,
+    dayPeriodTimes: () => settings.getDayPeriodTimes(),
+  });
+  const rawEvents = createCalendarEventService({
+    db,
+    now,
+    generateId: createIdGenerator('event'),
     timeZone: () => zone,
   });
   const adapter = createFakeNotificationAdapter({
@@ -122,15 +158,19 @@ export function createTestReminders(
   const coordinator = createReminderCoordinator({
     db,
     service: raw,
+    events: rawEvents,
     adapter,
     now,
     timeZone: () => zone,
   });
   const service = createSyncedTaskService(raw, coordinator);
-  const handler = createNotificationResponseHandler({ db, service, now });
+  const events = createSyncedCalendarEventService(rawEvents, coordinator);
+  const handler = createNotificationResponseHandler({ db, service, events, now });
   return {
     raw,
     service,
+    rawEvents,
+    events,
     adapter,
     coordinator,
     handler,
@@ -140,31 +180,48 @@ export function createTestReminders(
   };
 }
 
-export function unwrap<T>(result: TaskResult<T>): T {
+export function unwrap<T>(result: TaskResult<T> | EventResult<T>): T {
   if (!result.ok) {
     throw new Error(`Expected success, got ${result.error.type}: ${result.error.message}`);
   }
   return result.value;
 }
 
-export function renderApp(service: TaskService, initialUrl = '/', reminders?: TestReminders) {
+export function renderApp(
+  service: TaskService,
+  initialUrl = '/',
+  reminders?: TestReminders,
+  eventService?: CalendarEventService,
+) {
+  const events = reminders?.events ?? eventService;
+
+  function withEvents(children: ReactNode) {
+    return events === undefined ? (
+      children
+    ) : (
+      <CalendarEventServiceProvider service={events}>{children}</CalendarEventServiceProvider>
+    );
+  }
+
   function TestLayout() {
     const stack = <Stack screenOptions={{ headerShown: false }} />;
     return (
       <GestureHandlerRootView style={styles.root}>
         <TaskServiceProvider service={service}>
-          {reminders === undefined ? (
-            stack
-          ) : (
-            <ReminderProvider coordinator={reminders.coordinator}>
-              {stack}
-              <ReminderLifecycle
-                adapter={reminders.adapter}
-                coordinator={reminders.coordinator}
-                handler={reminders.handler}
-              />
-              <ReminderNoticeHost coordinator={reminders.coordinator} />
-            </ReminderProvider>
+          {withEvents(
+            reminders === undefined ? (
+              stack
+            ) : (
+              <ReminderProvider coordinator={reminders.coordinator}>
+                {stack}
+                <ReminderLifecycle
+                  adapter={reminders.adapter}
+                  coordinator={reminders.coordinator}
+                  handler={reminders.handler}
+                />
+                <ReminderNoticeHost coordinator={reminders.coordinator} />
+              </ReminderProvider>
+            ),
           )}
         </TaskServiceProvider>
       </GestureHandlerRootView>
@@ -175,6 +232,7 @@ export function renderApp(service: TaskService, initialUrl = '/', reminders?: Te
     {
       _layout: TestLayout,
       index: TodayRoute,
+      calendar: CalendarRoute,
       settings: SettingsRoute,
       future: FutureRoute,
       'task/new': NewTaskRoute,
@@ -182,6 +240,10 @@ export function renderApp(service: TaskService, initialUrl = '/', reminders?: Te
       'task/[id]/edit': EditTaskRoute,
       'task/[id]/remind-later': RemindLaterRoute,
       'task/[id]/priority': ChangePriorityRoute,
+      'event/new': NewEventRoute,
+      'event/[id]/index': EventDetailsRoute,
+      'event/[id]/edit': EditEventRoute,
+      'event/[id]/remind-later': EventRemindLaterRoute,
     },
     { initialUrl },
   );

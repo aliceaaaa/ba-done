@@ -3,7 +3,6 @@ import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import type { SnoozeOption } from '@/entities/reminder';
-import { describeTaskError, useTaskService } from '@/entities/task';
 import { UI_STRINGS } from '@/shared/config/ui-strings';
 import { addMinutes, roundUpToMinute, toLocalDateTime } from '@/shared/lib/local-date';
 import { DateTimeField } from '@/shared/ui/date-time-field';
@@ -12,12 +11,14 @@ import { colors, spacing } from '@/shared/ui/theme';
 
 import { useReminders } from '../model/reminder-context';
 
+export type SnoozeHandler = (localDateTime: string) => Promise<string | null>;
+
 type RemindLaterScreenProps = {
-  taskId: string;
+  onSnooze: SnoozeHandler;
+  fallbackPath: string;
 };
 
-export function RemindLaterScreen({ taskId }: RemindLaterScreenProps) {
-  const service = useTaskService();
+export function RemindLaterScreen({ onSnooze, fallbackPath }: RemindLaterScreenProps) {
   const coordinator = useReminders();
   const router = useRouter();
   const [options, setOptions] = useState<SnoozeOption[] | null>(null);
@@ -49,15 +50,15 @@ export function RemindLaterScreen({ taskId }: RemindLaterScreenProps) {
   }
 
   async function snooze(localDateTime: string) {
-    const result = await service.snoozeReminder(taskId, localDateTime);
-    if (!result.ok) {
-      setError(describeTaskError(result.error));
+    const failure = await onSnooze(localDateTime);
+    if (failure !== null) {
+      setError(failure);
       return;
     }
     if (router.canGoBack()) {
       router.back();
     } else {
-      router.replace(`/task/${taskId}`);
+      router.replace(fallbackPath);
     }
   }
 

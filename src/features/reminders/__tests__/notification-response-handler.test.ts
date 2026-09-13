@@ -125,6 +125,7 @@ describe('NotificationResponseHandler', () => {
     const restarted = createNotificationResponseHandler({
       db,
       service: app.service,
+      events: app.events,
       now: () => new Date('2026-09-11T09:00:00.000Z'),
     });
 
