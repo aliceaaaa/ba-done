@@ -11,6 +11,7 @@ import {
   useTaskService,
   type Task,
 } from '@/entities/task';
+import { ReminderStatus } from '@/features/reminders';
 import { UI_STRINGS } from '@/shared/config/ui-strings';
 import { TextButton } from '@/shared/ui/text-button';
 import { colors, spacing } from '@/shared/ui/theme';
@@ -128,6 +129,7 @@ export function TaskDetailsScreen({ taskId }: TaskDetailsScreenProps) {
         {task.reminder === null ? null : (
           <DetailRow label="Reminder" value={formatReminder(task.reminder)} />
         )}
+        <ReminderStatus task={task} />
         {isFuture && (time !== null || task.reminder !== null) ? (
           <Text style={styles.hint}>Time and reminder apply once the task is scheduled.</Text>
         ) : null}

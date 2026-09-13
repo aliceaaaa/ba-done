@@ -4,13 +4,12 @@ import { StyleSheet, Text, View } from 'react-native';
 import {
   PriorityPicker,
   describeTaskError,
-  formatTaskDate,
   useTaskService,
   type FutureTask,
   type PrioritySlot,
   type RankedTask,
 } from '@/entities/task';
-import { DateSwitcher } from '@/shared/ui/date-switcher';
+import { DateField } from '@/shared/ui/date-field';
 import { TextButton } from '@/shared/ui/text-button';
 import { colors, spacing } from '@/shared/ui/theme';
 
@@ -56,10 +55,10 @@ export function SchedulePanel({ task, today, onScheduled, onCancel }: SchedulePa
 
   return (
     <View style={styles.panel} testID={`schedule-panel-${task.id}`}>
-      <DateSwitcher
+      <DateField
+        label="Date"
         date={date}
         today={today}
-        label={formatTaskDate(date)}
         onChange={(next) => {
           setDate(next);
           setPriority(null);

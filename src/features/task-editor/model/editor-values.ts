@@ -98,12 +98,32 @@ export function editorValuesFromTask(task: Task, today: string): EditorValues {
   };
 }
 
+export const DEFAULT_EXACT_TIME = '09:00';
+export const DEFAULT_REMINDER_TIME = '18:00';
+
 export function selectTimeMode(values: EditorValues, timeMode: TimeMode): EditorValues {
   return {
     ...values,
     timeMode,
-    exactTime: timeMode === 'exact' ? values.exactTime : '',
+    exactTime: timeMode === 'exact' ? values.exactTime || DEFAULT_EXACT_TIME : '',
     dayPeriod: timeMode === 'period' ? values.dayPeriod : null,
+  };
+}
+
+export function selectExactTime(values: EditorValues, exactTime: string): EditorValues {
+  return { ...values, timeMode: 'exact', exactTime, dayPeriod: null };
+}
+
+export function selectReminderMode(values: EditorValues, reminderMode: ReminderMode): EditorValues {
+  if (reminderMode !== 'exact') {
+    return { ...values, reminderMode };
+  }
+  return {
+    ...values,
+    reminderMode,
+    reminderDate:
+      values.reminderDate || (values.placementMode === 'day' ? values.scheduledDate : ''),
+    reminderTime: values.reminderTime || DEFAULT_REMINDER_TIME,
   };
 }
 

@@ -8,10 +8,12 @@ import {
   createTestDatabase,
   createTestService,
   mockAlert,
+  pickDateTime,
   pressAlertButton,
   renderApp,
   unwrap,
 } from '@/test-utils/test-app';
+import { pickerDateToLocalTime } from '@/shared/lib/picker-values';
 
 describe('TaskEditor', () => {
   let db: NodeSqliteDatabase;
@@ -148,7 +150,7 @@ describe('TaskEditor', () => {
 
     expect(screen.getByLabelText('Title')).toHaveDisplayValue('Dentist');
     expect(screen.getByLabelText('Description')).toHaveDisplayValue('Checkup');
-    expect(screen.getByLabelText('Exact time')).toHaveDisplayValue('07:30');
+    expect(pickerDateToLocalTime(screen.getByLabelText('Exact time').props.value)).toBe('07:30');
     expect(screen.getByLabelText('Duration (min)')).toHaveDisplayValue('45');
     expect(screen.getByLabelText('Address')).toHaveDisplayValue('Main St 1');
     expect(screen.getByLabelText('Travel time (min)')).toHaveDisplayValue('10');
@@ -189,7 +191,7 @@ describe('TaskEditor', () => {
     await openEditor(task.id);
 
     await fireEvent.press(screen.getByRole('radio', { name: 'Exact time' }));
-    await fireEvent.changeText(screen.getByLabelText('Exact time'), '09:15');
+    await pickDateTime('Exact time', new Date(2026, 8, 11, 9, 15));
     await save();
 
     await waitFor(async () =>

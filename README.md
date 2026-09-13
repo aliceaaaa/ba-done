@@ -88,7 +88,8 @@ Future tasks never appear in the deck and never occupy a priority.
 - `swapPriorities`: swaps two active ranked tasks of the same day atomically.
 - `completeTask` (swipe right, “Done”) and `undo` for the latest Done or Not tonight.
 - `createFutureTask`: creates a task without a date, priority or placement.
-- `moveTaskToFuture`: returns a scheduled task to the Future pool and frees its position. A reminder with a date must be turned off explicitly (`clearDatedReminder`).
+- `moveTaskToFuture`: returns a scheduled task to the Future pool and frees its position. If the task has a reminder, the move requires confirmation (`clearReminder`); the reminder is then cleared in the same transaction.
+- `claimReturnNotices`: returns the carry-over tasks of a day whose “Match made in heaven” message has not been shown yet and records them in `carry_over_return_notices` by task and date, so the message appears once and never again after a restart. “Mega Crush” stays on every carry-over card.
 - `convertCarryOverToRanked`: gives a Mega Crush task a free ranked priority.
 - `editTask`: saves details and the placement change (`keep`, `ranked`, `future`) in one transaction, so a conflict never saves anything partially.
 - `setThingToTakeChecked`: checks an item of the things-to-take list.
@@ -104,7 +105,64 @@ One `TaskEditor` creates scheduled tasks, creates Future tasks and edits existin
 
 ### Reminders
 
-A reminder is `null`, an exact local date-time (`YYYY-MM-DDTHH:mm`) or a day period, always stored with the IANA time zone of the device (`getDeviceTimeZone()`). Notifications themselves are scheduled by the OS with the text “Still interested?” and the actions Done, Not tonight, Remind me later, Change priority.
+A reminder is `null`, an exact local date-time (`YYYY-MM-DDTHH:mm`) or a day period, always stored with the IANA time zone of the device (`getDeviceTimeZone()`). A day-period reminder fires on the task date at the time configured in Settings (defaults: Morning 09:00, Afternoon 13:00, Evening 18:00, Night 21:00).
+
+Domain rules (`TaskService`, no notification APIs):
+
+- An exact reminder in the past is rejected with “Choose a reminder time in the future”.
+- Not tonight moves an exact reminder by the same number of calendar days as the task; Undo moves it back.
+- `snoozeReminder` (Remind me later) changes only the reminder, never the date, priority or placement, and records a `reminderSnoozed` event.
+- `rebaseReminderTimeZones` keeps the local wall-clock time and switches the stored time zone.
+
+## Local notifications
+
+SQLite is the source of truth; the OS only holds scheduled notifications. No push notifications, tokens or backend.
+
+| Piece                         | Location                                                        | Responsibility                                                                                        |
+| ----------------------------- | --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `NotificationAdapter`         | `src/features/reminders/model/notification-adapter.ts`          | The only boundary to the OS. `expo-notifications` is used only in `api/expo-notification-adapter.ts`. |
+| `ReminderCoordinator`         | `src/features/reminders/model/reminder-coordinator.ts`          | Plans, schedules, cancels and reconciles notifications; stores the state in `reminder_schedules`.     |
+| Synced task service           | `src/features/reminders/model/synced-task-service.ts`           | Wraps `TaskService`; after every successful change it syncs the reminder of the affected tasks.       |
+| `NotificationResponseHandler` | `src/features/reminders/model/notification-response-handler.ts` | Handles taps and actions through the same `TaskService`, deduplicated in `notification_responses`.    |
+| `ReminderLifecycle`           | `src/features/reminders/ui/reminder-lifecycle.tsx`              | Startup, foreground, cold start and response listeners.                                               |
+
+### Schedule state
+
+`reminder_schedules` keeps `scheduledNotificationId`, `reminderScheduleStatus` (`notScheduled`, `scheduled`, `permissionDenied`, `failed`), `reminderScheduledAt`, `reminderScheduleError`, the planned `fireAt` and a fingerprint. Every notification uses the deterministic identifier `task-reminder-<taskId>`, so rescheduling replaces instead of duplicating. The payload contains `kind`, `version`, `taskId`, `scheduledDate`, `reminderType`, `url` (`/task/<id>`), `fireAt` and `fingerprint`.
+
+Saving a task always commits SQLite first. If the OS call fails, the task and reminder stay saved, the status becomes `failed` with the technical message in `reminderScheduleError` (never shown in the UI), and `reconcileReminders` retries later.
+
+### Reconcile
+
+`reconcile()` runs on startup, when the app returns to the foreground, after permission is granted and after a time zone change (`refresh()`). It loads active reminders from SQLite, lists the app's scheduled notifications, cancels app notifications without a matching task (notifications without the app payload are never touched), recreates missing or stale ones and updates the stored status. Running it repeatedly does not create duplicates.
+
+### Permissions
+
+Permission is never requested at startup. It is requested when a reminder is saved for the first time. If it is denied, the task and reminder are saved, the status is `permissionDenied`, a non-blocking notice offers “Open settings”, and the next foreground reconcile schedules pending reminders once access is granted. iOS provisional and ephemeral authorization count as granted; Android 12 and below grant notifications at install, Android 13+ asks for `POST_NOTIFICATIONS`.
+
+### Actions
+
+The `task-reminder` category has four actions: “Done”, “Not tonight”, “Remind me later”, “Change priority”. All of them open the app (`opensAppToForeground: true`) so that every action runs through the same handler and `TaskService`, also after a cold start; there is no separate background business logic.
+
+- Tap: opens `/task/<id>`.
+- Done: `completeTask`, cancels the notification; ignored if the task is already completed.
+- Not tonight: `postponeUntilTomorrow`, reschedules for the new date; ignored if the task already left the notified date.
+- Remind me later: opens `/task/<id>/remind-later` with 15 minutes, 1 hour, Tonight (Night time today), Tomorrow (Morning time tomorrow) and Pick a time.
+- Change priority: opens `/task/<id>/priority`; a Mega Crush task can be kept or converted with `convertCarryOverToRanked`.
+
+### Android
+
+- Reminders use the `reminders` channel (high importance), also set as the default channel in `app.json`.
+- `expo-notifications` restores scheduled notifications after reboot and app updates (`RECEIVE_BOOT_COMPLETED`, declared by the library).
+- On Android 12+ (API 31+) exact alarms require the special “Alarms & reminders” access. The app does not declare `SCHEDULE_EXACT_ALARM` or `USE_EXACT_ALARM`: `expo-notifications` then falls back to an inexact alarm, so delivery may be delayed by a few minutes. Settings shows this note on Android 12+ and the app never promises minute-exact delivery there.
+
+### Native pickers
+
+Dates and times are edited with `@react-native-community/datetimepicker` (compact picker on iOS, system dialog on Android) and stored as normalized `YYYY-MM-DD` / `HH:mm` values. They are displayed in the device locale.
+
+### Rebuild required
+
+`expo-notifications` and `@react-native-community/datetimepicker` are native modules, and `app.json` gained the `expo-notifications` plugin. Rebuild the development build with `npm run ios` / `npm run android`. A manual QA checklist lives in [docs/notifications-manual-qa.md](docs/notifications-manual-qa.md).
 
 ### Required UI copy
 

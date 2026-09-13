@@ -84,6 +84,7 @@ export type TaskRepository = {
   listDeck(scheduledDate: string): Promise<ScheduledTask[]>;
   listActiveCarryOvers(scheduledDate: string): Promise<CarryOverTask[]>;
   listFuturePool(): Promise<FutureTask[]>;
+  listActiveWithReminders(): Promise<Task[]>;
   insert(task: Task): Promise<void>;
   update(task: Task): Promise<void>;
   setCarryOverOrder(id: string, carryOverOrder: number): Promise<void>;
@@ -289,6 +290,14 @@ export function createTaskRepository(db: SqlExecutor): TaskRepository {
         'ORDER BY created_at DESC, id DESC',
       );
       return tasks.filter(isFutureTask);
+    },
+
+    listActiveWithReminders() {
+      return select(
+        `reminder_type IS NOT NULL AND status = 'active'`,
+        [],
+        'ORDER BY created_at ASC, id ASC',
+      );
     },
 
     async insert(task) {

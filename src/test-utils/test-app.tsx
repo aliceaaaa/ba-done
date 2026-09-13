@@ -1,12 +1,15 @@
 import { Stack } from 'expo-router';
-import { act, renderRouter } from 'expo-router/testing-library';
+import { act, fireEvent, renderRouter, screen } from 'expo-router/testing-library';
 import { Alert, StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import TodayRoute from '@/app/(tabs)/index';
+import SettingsRoute from '@/app/(tabs)/settings';
 import FutureRoute from '@/app/future';
 import EditTaskRoute from '@/app/task/[id]/edit';
 import TaskDetailsRoute from '@/app/task/[id]/index';
+import ChangePriorityRoute from '@/app/task/[id]/priority';
+import RemindLaterRoute from '@/app/task/[id]/remind-later';
 import NewTaskRoute from '@/app/task/new';
 import { migrateDatabase } from '@/database/migrations';
 import type { SqlDatabase } from '@/database/sql-database';
@@ -20,6 +23,21 @@ import {
   type TaskResult,
   type TaskService,
 } from '@/entities/task';
+import {
+  ReminderLifecycle,
+  ReminderNoticeHost,
+  ReminderProvider,
+  createNotificationResponseHandler,
+  createReminderCoordinator,
+  createSyncedTaskService,
+  type NotificationPermission,
+  type NotificationResponseHandler,
+  type ReminderCoordinator,
+} from '@/features/reminders';
+import {
+  createFakeNotificationAdapter,
+  type FakeNotificationAdapter,
+} from '@/features/reminders/testing/fake-notification-adapter';
 
 export const TEST_TIME_ZONE = 'Europe/Berlin';
 export const TEST_START = '2026-09-11T08:00:00.000Z';
@@ -31,6 +49,7 @@ type TestServiceOptions = {
   start?: string;
   timeZone?: string;
   idPrefix?: string;
+  now?: () => Date;
 };
 
 export async function createTestDatabase(): Promise<NodeSqliteDatabase> {
@@ -39,23 +58,86 @@ export async function createTestDatabase(): Promise<NodeSqliteDatabase> {
   return db;
 }
 
+export function createTestClock(start: string = TEST_START): () => Date {
+  let current = Date.parse(start);
+  return () => {
+    current += 1000;
+    return new Date(current);
+  };
+}
+
 export function createTestService(db: SqlDatabase, options: TestServiceOptions = {}): TaskService {
-  let current = Date.parse(options.start ?? TEST_START);
   let counter = 0;
   const prefix = options.idPrefix ?? 'id';
   const zone = options.timeZone ?? TEST_TIME_ZONE;
   return createTaskService({
     db,
-    now: () => {
-      current += 1000;
-      return new Date(current);
-    },
+    now: options.now ?? createTestClock(options.start),
     generateId: () => {
       counter += 1;
       return `${prefix}-${counter}`;
     },
     timeZone: () => zone,
   });
+}
+
+export type TestReminders = {
+  raw: TaskService;
+  service: TaskService;
+  adapter: FakeNotificationAdapter;
+  coordinator: ReminderCoordinator;
+  handler: NotificationResponseHandler;
+  setTimeZone(timeZone: string): void;
+};
+
+type TestRemindersOptions = {
+  start?: string;
+  timeZone?: string;
+  permission?: NotificationPermission;
+  requestResult?: NotificationPermission;
+};
+
+export function createTestReminders(
+  db: SqlDatabase,
+  options: TestRemindersOptions = {},
+): TestReminders {
+  const now = createTestClock(options.start);
+  let zone = options.timeZone ?? TEST_TIME_ZONE;
+  const raw = createTaskService({
+    db,
+    now,
+    generateId: (() => {
+      let counter = 0;
+      return () => {
+        counter += 1;
+        return `id-${counter}`;
+      };
+    })(),
+    timeZone: () => zone,
+  });
+  const adapter = createFakeNotificationAdapter({
+    ...(options.permission === undefined ? {} : { permission: options.permission }),
+    ...(options.requestResult === undefined ? {} : { requestResult: options.requestResult }),
+  });
+  const coordinator = createReminderCoordinator({
+    db,
+    service: raw,
+    adapter,
+    now,
+    timeZone: () => zone,
+  });
+  const service = createSyncedTaskService(raw, coordinator);
+  const handler = createNotificationResponseHandler({ db, service, now });
+  return {
+    raw,
+    service,
+    adapter,
+    coordinator,
+    handler,
+    setTimeZone(next) {
+      zone = next;
+    },
+  };
 }
 
 export function unwrap<T>(result: TaskResult<T>): T {
@@ -65,12 +147,25 @@ export function unwrap<T>(result: TaskResult<T>): T {
   return result.value;
 }
 
-export function renderApp(service: TaskService, initialUrl = '/') {
+export function renderApp(service: TaskService, initialUrl = '/', reminders?: TestReminders) {
   function TestLayout() {
+    const stack = <Stack screenOptions={{ headerShown: false }} />;
     return (
       <GestureHandlerRootView style={styles.root}>
         <TaskServiceProvider service={service}>
-          <Stack screenOptions={{ headerShown: false }} />
+          {reminders === undefined ? (
+            stack
+          ) : (
+            <ReminderProvider coordinator={reminders.coordinator}>
+              {stack}
+              <ReminderLifecycle
+                adapter={reminders.adapter}
+                coordinator={reminders.coordinator}
+                handler={reminders.handler}
+              />
+              <ReminderNoticeHost coordinator={reminders.coordinator} />
+            </ReminderProvider>
+          )}
         </TaskServiceProvider>
       </GestureHandlerRootView>
     );
@@ -80,12 +175,24 @@ export function renderApp(service: TaskService, initialUrl = '/') {
     {
       _layout: TestLayout,
       index: TodayRoute,
+      settings: SettingsRoute,
       future: FutureRoute,
       'task/new': NewTaskRoute,
       'task/[id]/index': TaskDetailsRoute,
       'task/[id]/edit': EditTaskRoute,
+      'task/[id]/remind-later': RemindLaterRoute,
+      'task/[id]/priority': ChangePriorityRoute,
     },
     { initialUrl },
+  );
+}
+
+export async function pickDateTime(label: string, value: Date): Promise<void> {
+  await fireEvent(
+    screen.getByLabelText(label),
+    'onChange',
+    { type: 'set', nativeEvent: { timestamp: value.getTime(), utcOffset: 0 } },
+    value,
   );
 }
 

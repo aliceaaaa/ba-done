@@ -5,6 +5,7 @@ import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-han
 import type { NodeSqliteDatabase } from '@/database/testing/node-sqlite-database';
 import type { CreateTaskInput, RankedTask, TaskService } from '@/entities/task';
 import { RETURN_NOTICE_MS } from '@/features/today-deck/model/use-return-notices';
+import { formatLocalTime } from '@/shared/lib/picker-values';
 import {
   TODAY,
   TOMORROW,
@@ -119,19 +120,25 @@ describe('Your matches', () => {
     expect(rankedCard.getByLabelText('Priority 9')).toBeTruthy();
   });
 
-  it('shows "Match made in heaven" only once for a task and day, even after a restart', async () => {
+  it('shows "Match made in heaven" only once for a task and day', async () => {
     const [carried] = await carryIntoToday('Returned');
     const carriedId = carried?.id ?? '';
 
     await showToday(service, [carriedId]);
     const firstCard = within(screen.getByTestId(`task-card-${carriedId}`));
     expect(await firstCard.findByText('Match made in heaven')).toBeTruthy();
-    screen.unmount();
 
-    await showToday(createTestService(db, { idPrefix: 'restart' }), [carriedId]);
-    const secondCard = within(screen.getByTestId(`task-card-${carriedId}`));
-    expect(secondCard.getByText('Mega Crush')).toBeTruthy();
-    expect(secondCard.queryByText('Match made in heaven')).toBeNull();
+    await fireEvent.press(screen.getByRole('button', { name: 'Next day' }));
+    await screen.findByTestId('empty-deck');
+    await fireEvent.press(screen.getByRole('button', { name: 'Previous day' }));
+    await waitFor(() => expect(cardIds()).toEqual([carriedId]));
+
+    const revisitedCard = within(screen.getByTestId(`task-card-${carriedId}`));
+    expect(revisitedCard.getByText('Mega Crush')).toBeTruthy();
+    expect(revisitedCard.queryByText('Match made in heaven')).toBeNull();
+    expect(await createTestService(db, { idPrefix: 'restart' }).claimReturnNotices(TODAY)).toEqual(
+      [],
+    );
   });
 
   it('keeps "Mega Crush" visible after "Match made in heaven" disappears', async () => {
@@ -155,7 +162,9 @@ describe('Your matches', () => {
 
     await showToday(service, [exact.id, period.id, plain.id]);
 
-    expect(within(screen.getByTestId(`task-card-${exact.id}`)).getByText('07:30')).toBeTruthy();
+    expect(
+      within(screen.getByTestId(`task-card-${exact.id}`)).getByText(formatLocalTime('07:30')),
+    ).toBeTruthy();
     expect(within(screen.getByTestId(`task-card-${period.id}`)).getByText('Evening')).toBeTruthy();
     expect(within(screen.getByTestId(`task-card-${plain.id}`)).queryByText(/\d\d:\d\d/)).toBeNull();
   });

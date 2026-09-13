@@ -1,5 +1,5 @@
-import { ScreenTitle } from '@/shared/ui/screen-title';
+import { ReminderSettingsScreen } from '@/features/reminders';
 
 export default function SettingsScreen() {
-  return <ScreenTitle title="Settings" />;
+  return <ReminderSettingsScreen />;
 }

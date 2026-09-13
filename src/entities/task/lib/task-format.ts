@@ -1,3 +1,5 @@
+import { formatLocalTime } from '@/shared/lib/picker-values';
+
 import type { TaskError } from '../model/task-errors';
 import type { DayPeriod, Task, TaskReminder } from '../model/types';
 
@@ -25,7 +27,7 @@ export function formatMinutes(minutes: number): string {
 
 export function taskTimeLabel(task: Pick<Task, 'exactTime' | 'dayPeriod'>): string | null {
   if (task.exactTime !== null) {
-    return task.exactTime;
+    return formatLocalTime(task.exactTime);
   }
   return task.dayPeriod === null ? null : DAY_PERIOD_LABELS[task.dayPeriod];
 }
@@ -33,7 +35,7 @@ export function taskTimeLabel(task: Pick<Task, 'exactTime' | 'dayPeriod'>): stri
 export function formatReminder(reminder: TaskReminder): string {
   if (reminder.type === 'exact') {
     const [date = '', time = ''] = reminder.localDateTime.split('T');
-    return `${formatTaskDate(date)}, ${time} (${reminder.timeZone})`;
+    return `${formatTaskDate(date)}, ${formatLocalTime(time)} (${reminder.timeZone})`;
   }
   return `${DAY_PERIOD_LABELS[reminder.period]} (${reminder.timeZone})`;
 }

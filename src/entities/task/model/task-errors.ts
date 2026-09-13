@@ -33,7 +33,8 @@ export type TaskAction =
   | 'changePriority'
   | 'convert'
   | 'moveToFuture'
-  | 'edit';
+  | 'edit'
+  | 'snooze';
 
 export type InvalidTaskStateReason = 'completed' | 'future' | 'scheduled' | 'ranked';
 
@@ -108,6 +109,7 @@ const ACTION_PHRASES: Record<TaskAction, string> = {
   convert: 'convert',
   moveToFuture: 'move to Future',
   edit: 'change the placement of',
+  snooze: 'change the reminder of',
 };
 
 export function invalidTaskState(

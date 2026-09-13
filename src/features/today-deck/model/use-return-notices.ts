@@ -1,27 +1,39 @@
-import { useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { useTaskService } from '@/entities/task';
 
 export const RETURN_NOTICE_MS = 4000;
 
+type ReturnNotice = {
+  date: string;
+  taskIds: string[];
+};
+
 export function useReturnNotices(date: string): readonly string[] {
   const service = useTaskService();
-  const [notice, setNotice] = useState<{ date: string; taskIds: string[] } | null>(null);
+  const [notice, setNotice] = useState<ReturnNotice | null>(null);
+  const mounted = useRef(true);
 
-  useFocusEffect(
-    useCallback(() => {
-      let active = true;
-      void service.claimReturnNotices(date).then((taskIds) => {
-        if (active && taskIds.length > 0) {
-          setNotice({ date, taskIds });
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    void service.claimReturnNotices(date).then((taskIds) => {
+      if (!mounted.current) {
+        return;
+      }
+      setNotice((current) => {
+        if (taskIds.length > 0) {
+          return { date, taskIds };
         }
+        return current?.date === date ? null : current;
       });
-      return () => {
-        active = false;
-      };
-    }, [service, date]),
-  );
+    });
+  }, [service, date]);
 
   useEffect(() => {
     if (notice === null) {

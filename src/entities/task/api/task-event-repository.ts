@@ -1,5 +1,6 @@
 import type { SqlExecutor, SqlValue } from '@/database/sql-database';
 
+import { parseReminder } from '../lib/reminder-json';
 import type { DeckPosition, PostponedEvent, TaskEvent } from '../model/types';
 
 type TaskEventRow = {
@@ -12,6 +13,7 @@ type TaskEventRow = {
   from_priority: number | null;
   from_carry_over_order: number | null;
   previous_updated_at: string | null;
+  details: string | null;
   occurred_at: string;
 };
 
@@ -25,6 +27,7 @@ const COLUMNS = [
   'from_priority',
   'from_carry_over_order',
   'previous_updated_at',
+  'details',
   'occurred_at',
 ] as const;
 
@@ -63,6 +66,28 @@ function toPosition(row: TaskEventRow): DeckPosition {
   throw new Error(`Task event ${row.id} has an invalid position`);
 }
 
+function toSnoozedEvent(row: TaskEventRow): TaskEvent {
+  const details: unknown = row.details === null ? null : JSON.parse(row.details);
+  if (typeof details !== 'object' || details === null || !('reminder' in details)) {
+    throw new Error(`Task event ${row.id} has invalid details`);
+  }
+  const reminder = parseReminder(details.reminder);
+  const previousReminder =
+    'previousReminder' in details ? parseReminder(details.previousReminder) : null;
+  if (reminder === null) {
+    throw new Error(`Task event ${row.id} has an invalid reminder`);
+  }
+  return {
+    id: row.id,
+    taskId: row.task_id,
+    type: 'reminderSnoozed',
+    previousReminder,
+    reminder,
+    previousUpdatedAt: row.previous_updated_at,
+    occurredAt: row.occurred_at,
+  };
+}
+
 function toEvent(row: TaskEventRow): TaskEvent {
   if (row.type === 'postponed' && row.from_date !== null && row.to_date !== null) {
     return {
@@ -86,6 +111,9 @@ function toEvent(row: TaskEventRow): TaskEvent {
       occurredAt: row.occurred_at,
     };
   }
+  if (row.type === 'reminderSnoozed') {
+    return toSnoozedEvent(row);
+  }
   throw new Error(`Task event ${row.id} is invalid`);
 }
 
@@ -101,6 +129,22 @@ function toValues(event: TaskEvent): SqlValue[] {
       event.from.priority,
       event.from.carryOverOrder,
       event.previousUpdatedAt,
+      null,
+      event.occurredAt,
+    ];
+  }
+  if (event.type === 'reminderSnoozed') {
+    return [
+      event.id,
+      event.taskId,
+      event.type,
+      null,
+      null,
+      null,
+      null,
+      null,
+      event.previousUpdatedAt,
+      JSON.stringify({ previousReminder: event.previousReminder, reminder: event.reminder }),
       event.occurredAt,
     ];
   }
@@ -114,6 +158,7 @@ function toValues(event: TaskEvent): SqlValue[] {
     null,
     null,
     event.previousUpdatedAt,
+    null,
     event.occurredAt,
   ];
 }

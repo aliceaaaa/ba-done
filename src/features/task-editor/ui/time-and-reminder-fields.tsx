@@ -2,11 +2,13 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { DAY_PERIOD_LABELS, DAY_PERIODS, type DayPeriod } from '@/entities/task';
 import { ChipRow, type ChipOption } from '@/shared/ui/chip-row';
-import { LabeledInput } from '@/shared/ui/labeled-input';
+import { DateTimeField } from '@/shared/ui/date-time-field';
 import { colors, spacing } from '@/shared/ui/theme';
 
 import {
   selectDayPeriod,
+  selectExactTime,
+  selectReminderMode,
   selectTimeMode,
   type EditorValues,
   type ReminderMode,
@@ -67,12 +69,11 @@ export function TimeFields({ values, onChange }: FieldsProps) {
         onSelect={(mode) => onChange(selectTimeMode(values, mode))}
       />
       {values.timeMode === 'exact' ? (
-        <LabeledInput
+        <DateTimeField
+          mode="time"
           label="Exact time"
-          placeholder="HH:mm"
-          keyboardType="numbers-and-punctuation"
           value={values.exactTime}
-          onChangeText={(exactTime) => onChange({ ...values, exactTime })}
+          onChange={(exactTime) => onChange(selectExactTime(values, exactTime))}
         />
       ) : null}
       {values.timeMode === 'period' ? (
@@ -107,7 +108,7 @@ export function ReminderFields({
         accessibilityLabel="Reminder"
         options={options}
         selected={values.reminderMode}
-        onSelect={(reminderMode) => onChange({ ...values, reminderMode })}
+        onSelect={(reminderMode) => onChange(selectReminderMode(values, reminderMode))}
       />
       {allowDatedReminder ? null : (
         <Text style={styles.hint}>
@@ -116,19 +117,17 @@ export function ReminderFields({
       )}
       {allowDatedReminder && values.reminderMode === 'exact' ? (
         <View style={styles.pair}>
-          <LabeledInput
+          <DateTimeField
+            mode="date"
             label="Reminder date"
-            placeholder="YYYY-MM-DD"
-            keyboardType="numbers-and-punctuation"
             value={values.reminderDate}
-            onChangeText={(reminderDate) => onChange({ ...values, reminderDate })}
+            onChange={(reminderDate) => onChange({ ...values, reminderDate })}
           />
-          <LabeledInput
+          <DateTimeField
+            mode="time"
             label="Reminder time"
-            placeholder="HH:mm"
-            keyboardType="numbers-and-punctuation"
             value={values.reminderTime}
-            onChangeText={(reminderTime) => onChange({ ...values, reminderTime })}
+            onChange={(reminderTime) => onChange({ ...values, reminderTime })}
           />
         </View>
       ) : null}

@@ -61,6 +61,123 @@ export function addDays(value: string, days: number): string {
     .slice(0, 10);
 }
 
+const MINUTE_MS = 60_000;
+const DAY_MS = 86_400_000;
+
+type WallClock = {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+  second: number;
+};
+
+const wallClockFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function wallClockFormatter(timeZone: string): Intl.DateTimeFormat {
+  const cached = wallClockFormatters.get(timeZone);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+  wallClockFormatters.set(timeZone, formatter);
+  return formatter;
+}
+
+function wallClockAt(instant: number, timeZone: string): WallClock {
+  const parts = wallClockFormatter(timeZone).formatToParts(new Date(instant));
+  const read = (type: Intl.DateTimeFormatPartTypes) => {
+    const value = parts.find((part) => part.type === type)?.value;
+    if (value === undefined) {
+      throw new Error(`Cannot resolve wall clock time in time zone "${timeZone}"`);
+    }
+    return Number(value);
+  };
+  return {
+    year: read('year'),
+    month: read('month'),
+    day: read('day'),
+    hour: read('hour') % 24,
+    minute: read('minute'),
+    second: read('second'),
+  };
+}
+
+function offsetAt(instant: number, timeZone: string): number {
+  const wall = wallClockAt(instant, timeZone);
+  const asUtc = Date.UTC(wall.year, wall.month - 1, wall.day, wall.hour, wall.minute, wall.second);
+  return asUtc - Math.floor(instant / 1000) * 1000;
+}
+
+function pad(value: number): string {
+  return String(value).padStart(2, '0');
+}
+
+export function zonedDateTimeToInstant(localDateTime: string, timeZone: string): Date {
+  if (!isValidLocalDateTime(localDateTime)) {
+    throw new Error(`Invalid local date-time "${localDateTime}"`);
+  }
+  const [date = '', time = ''] = localDateTime.split('T');
+  const [year, month, day] = date.split('-').map(Number);
+  const [hour, minute] = time.split(':').map(Number);
+  const wall = Date.UTC(year ?? 0, (month ?? 1) - 1, day ?? 1, hour ?? 0, minute ?? 0);
+  const firstOffset = offsetAt(wall, timeZone);
+  const firstGuess = wall - firstOffset;
+  const secondOffset = offsetAt(firstGuess, timeZone);
+  if (firstOffset === secondOffset) {
+    return new Date(firstGuess);
+  }
+  const secondGuess = wall - secondOffset;
+  const thirdOffset = offsetAt(secondGuess, timeZone);
+  if (secondOffset === thirdOffset) {
+    return new Date(secondGuess);
+  }
+  return new Date(wall - Math.min(secondOffset, thirdOffset));
+}
+
+export function toLocalTime(instant: Date, timeZone: string): string {
+  const wall = wallClockAt(instant.getTime(), timeZone);
+  return `${pad(wall.hour)}:${pad(wall.minute)}`;
+}
+
+export function toLocalDateTime(instant: Date, timeZone: string): string {
+  return `${toLocalDate(instant, timeZone)}T${toLocalTime(instant, timeZone)}`;
+}
+
+export function roundUpToMinute(instant: Date): Date {
+  return new Date(Math.ceil(instant.getTime() / MINUTE_MS) * MINUTE_MS);
+}
+
+export function addMinutes(instant: Date, minutes: number): Date {
+  return new Date(instant.getTime() + minutes * MINUTE_MS);
+}
+
+export function daysBetween(from: string, to: string): number {
+  const start = parseLocalDate(from);
+  const end = parseLocalDate(to);
+  if (start === null || end === null) {
+    throw new Error(`Invalid local dates "${from}" and "${to}"`);
+  }
+  const startMs = Date.UTC(start.year, start.month - 1, start.day);
+  const endMs = Date.UTC(end.year, end.month - 1, end.day);
+  return Math.round((endMs - startMs) / DAY_MS);
+}
+
+export function shiftLocalDateTime(localDateTime: string, days: number): string {
+  const [date = '', time = ''] = localDateTime.split('T');
+  return `${addDays(date, days)}T${time}`;
+}
+
 export function toLocalDate(instant: Date, timeZone: string): string {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone,

@@ -4,7 +4,6 @@ import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   PriorityPicker,
   describeTaskError,
-  formatTaskDate,
   useTaskService,
   type PrioritySlot,
   type Task,
@@ -12,7 +11,7 @@ import {
 } from '@/entities/task';
 import { UI_STRINGS } from '@/shared/config/ui-strings';
 import { ChipRow, type ChipOption } from '@/shared/ui/chip-row';
-import { DateSwitcher } from '@/shared/ui/date-switcher';
+import { DateField } from '@/shared/ui/date-field';
 import { LabeledInput } from '@/shared/ui/labeled-input';
 import { TextButton } from '@/shared/ui/text-button';
 import { colors, spacing } from '@/shared/ui/theme';
@@ -181,10 +180,10 @@ export function TaskEditor(props: TaskEditorProps) {
         />
         {values.placementMode === 'day' ? (
           <View style={styles.group}>
-            <DateSwitcher
+            <DateField
+              label="Date"
               date={values.scheduledDate}
               today={today}
-              label={formatTaskDate(values.scheduledDate)}
               onChange={(scheduledDate) => setValues({ ...values, scheduledDate })}
             />
             {isMegaCrush ? (

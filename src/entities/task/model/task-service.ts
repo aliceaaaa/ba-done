@@ -1,5 +1,13 @@
 import type { SqlDatabase, SqlExecutor } from '@/database/sql-database';
-import { addDays, toLocalDate } from '@/shared/lib/local-date';
+import {
+  addDays,
+  daysBetween,
+  isValidLocalDateTime,
+  isValidTimeZone,
+  shiftLocalDateTime,
+  toLocalDate,
+  zonedDateTimeToInstant,
+} from '@/shared/lib/local-date';
 import { err, ok, type Result } from '@/shared/lib/result';
 
 import { createReturnNoticeRepository } from '../api/return-notice-repository';
@@ -52,6 +60,7 @@ import {
   type Task,
   type TaskDetails,
   type TaskDetailsInput,
+  type ReminderSnoozedEvent,
   type TaskEvent,
   type TaskReminder,
   type ThingToTake,
@@ -83,6 +92,13 @@ export type CompleteResult = {
   event: CompletedEvent;
 };
 
+export type SnoozeResult = {
+  task: Task;
+  event: ReminderSnoozedEvent;
+};
+
+export const REMINDER_IN_PAST_MESSAGE = 'Choose a reminder time in the future';
+
 export type TaskService = {
   getToday(): string;
   getTimeZone(): string;
@@ -91,6 +107,10 @@ export type TaskService = {
   getFuturePool(): Promise<FutureTask[]>;
   getHistory(id: string): Promise<TaskEvent[]>;
   claimReturnNotices(scheduledDate: string): Promise<string[]>;
+  getTasksWithReminders(): Promise<Task[]>;
+  snoozeReminder(id: string, localDateTime: string): Promise<TaskResult<SnoozeResult>>;
+  rebaseReminderTimeZones(timeZone: string): Promise<TaskResult<string[]>>;
+  onChange(listener: () => void): () => void;
   getPriorityAvailability(
     scheduledDate: string,
     options?: PriorityAvailabilityOptions,
@@ -209,6 +229,27 @@ function completedGuard(task: Task, action: TaskAction): InvalidTaskState | null
   return task.status === 'completed' ? invalidTaskState(task.id, action, 'completed') : null;
 }
 
+function shiftExactReminder(reminder: TaskReminder | null, days: number): TaskReminder | null {
+  if (reminder?.type !== 'exact' || days === 0) {
+    return reminder;
+  }
+  return { ...reminder, localDateTime: shiftLocalDateTime(reminder.localDateTime, days) };
+}
+
+function reminderInPastIssues(reminder: TaskReminder | null, instant: Date): ValidationIssue[] {
+  if (
+    reminder?.type !== 'exact' ||
+    !isValidLocalDateTime(reminder.localDateTime) ||
+    !isValidTimeZone(reminder.timeZone)
+  ) {
+    return [];
+  }
+  const fireAt = zonedDateTimeToInstant(reminder.localDateTime, reminder.timeZone);
+  return fireAt.getTime() <= instant.getTime()
+    ? [{ field: 'reminder', message: REMINDER_IN_PAST_MESSAGE }]
+    : [];
+}
+
 function restoreFromEvent(task: Task, event: TaskEvent, fallbackUpdatedAt: string): Task | null {
   const updatedAt = event.previousUpdatedAt ?? fallbackUpdatedAt;
   if (event.type === 'completed') {
@@ -216,12 +257,18 @@ function restoreFromEvent(task: Task, event: TaskEvent, fallbackUpdatedAt: strin
       ? { ...task, status: 'active', completedAt: null, updatedAt }
       : null;
   }
+  if (event.type === 'reminderSnoozed') {
+    return task.status === 'active'
+      ? { ...task, reminder: event.previousReminder, updatedAt }
+      : null;
+  }
   const isWhereEventLeftIt =
     task.status === 'active' &&
     task.placementType === 'carryOver' &&
     task.scheduledDate === event.toDate;
+  const reminder = shiftExactReminder(task.reminder, -daysBetween(event.fromDate, event.toDate));
   return isWhereEventLeftIt
-    ? { ...task, scheduledDate: event.fromDate, ...event.from, updatedAt }
+    ? { ...task, scheduledDate: event.fromDate, ...event.from, reminder, updatedAt }
     : null;
 }
 
@@ -306,18 +353,27 @@ async function writeRestored(repos: Repositories, task: Task): Promise<TaskResul
 
 export function createTaskService({ db, now, generateId, timeZone }: TaskServiceDeps): TaskService {
   const timestamp = () => now().toISOString();
+  const listeners = new Set<() => void>();
+
+  function notifyChanged() {
+    for (const listener of [...listeners]) {
+      listener();
+    }
+  }
 
   async function inTransaction<T>(
     work: (repos: Repositories) => Promise<TaskResult<T>>,
   ): Promise<TaskResult<T>> {
     try {
-      return await db.transaction(async (tx) => {
+      const committed = await db.transaction(async (tx) => {
         const result = await work(createRepositories(tx));
         if (!result.ok) {
           throw new TransactionAborted(result.error);
         }
         return result;
       });
+      notifyChanged();
+      return committed;
     } catch (error) {
       if (error instanceof TransactionAborted) {
         return err(error.taskError);
@@ -434,6 +490,81 @@ export function createTaskService({ db, now, generateId, timeZone }: TaskService
       return createTaskEventRepository(db).listByTask(id);
     },
 
+    onChange(listener) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+
+    getTasksWithReminders() {
+      return createTaskRepository(db).listActiveWithReminders();
+    },
+
+    snoozeReminder(id, localDateTime) {
+      return inTransaction((repos) =>
+        withTask(repos, id, async (task) => {
+          const blocked = completedGuard(task, 'snooze');
+          if (blocked !== null) {
+            return err(blocked);
+          }
+          if (!isScheduledTask(task)) {
+            return err(invalidTaskState(task.id, 'snooze', 'future'));
+          }
+          const reminder: TaskReminder = { type: 'exact', localDateTime, timeZone: timeZone() };
+          const validated = validateDetails({ ...detailsFromTask(task), reminder });
+          if (!validated.ok) {
+            return validated;
+          }
+          const instant = now();
+          const pastIssues = reminderInPastIssues(reminder, instant);
+          if (pastIssues.length > 0) {
+            return err(validationError(pastIssues));
+          }
+          const occurredAt = instant.toISOString();
+          const snoozed: Task = { ...task, reminder, updatedAt: occurredAt };
+          const event: ReminderSnoozedEvent = {
+            id: generateId(),
+            taskId: task.id,
+            type: 'reminderSnoozed',
+            previousReminder: task.reminder,
+            reminder,
+            previousUpdatedAt: task.updatedAt,
+            occurredAt,
+          };
+          await repos.tasks.update(snoozed);
+          await repos.events.insert(event);
+          return ok({ task: snoozed, event });
+        }),
+      );
+    },
+
+    rebaseReminderTimeZones(nextTimeZone) {
+      return inTransaction(async (repos) => {
+        if (!isValidTimeZone(nextTimeZone)) {
+          return err(
+            validationError([
+              { field: 'reminder', message: 'Reminder time zone must be a valid IANA time zone' },
+            ]),
+          );
+        }
+        const updatedAt = timestamp();
+        const changed: string[] = [];
+        for (const task of await repos.tasks.listActiveWithReminders()) {
+          if (task.reminder === null || task.reminder.timeZone === nextTimeZone) {
+            continue;
+          }
+          await repos.tasks.update({
+            ...task,
+            reminder: { ...task.reminder, timeZone: nextTimeZone },
+            updatedAt,
+          });
+          changed.push(task.id);
+        }
+        return ok(changed);
+      });
+    },
+
     claimReturnNotices(scheduledDate) {
       return db.transaction(async (tx) => {
         const notices = createReturnNoticeRepository(tx);
@@ -473,11 +604,16 @@ export function createTaskService({ db, now, generateId, timeZone }: TaskService
         if (!slot.ok || !details.ok) {
           return err(validationError([...issuesOf(slot), ...issuesOf(details)]));
         }
+        const instant = now();
+        const pastIssues = reminderInPastIssues(details.value.reminder, instant);
+        if (pastIssues.length > 0) {
+          return err(validationError(pastIssues));
+        }
         const conflict = await findConflict(repos.tasks, slot.value, null);
         if (conflict !== null) {
           return err(conflict);
         }
-        const createdAt = timestamp();
+        const createdAt = instant.toISOString();
         const task: RankedTask = {
           ...details.value,
           id: generateId(),
@@ -519,9 +655,15 @@ export function createTaskService({ db, now, generateId, timeZone }: TaskService
 
     updateTask(id, patch) {
       return inTransaction((repos) =>
-        withTask(repos, id, (task) =>
-          saveDetails(repos, task, mergeDetails(task, patch, timeZone())),
-        ),
+        withTask(repos, id, async (task) => {
+          const details = mergeDetails(task, patch, timeZone());
+          const pastIssues =
+            patch.reminder === undefined ? [] : reminderInPastIssues(details.reminder, now());
+          if (pastIssues.length > 0) {
+            return err(validationError(pastIssues));
+          }
+          return saveDetails(repos, task, details);
+        }),
       );
     },
 
@@ -535,7 +677,15 @@ export function createTaskService({ db, now, generateId, timeZone }: TaskService
               return err(blocked);
             }
           }
-          return applyEdit(repos, task, mergeDetails(task, patch, timeZone()), placement);
+          const details = mergeDetails(task, patch, timeZone());
+          const pastIssues =
+            patch.reminder === undefined || placement.kind === 'future'
+              ? []
+              : reminderInPastIssues(details.reminder, now());
+          if (pastIssues.length > 0) {
+            return err(validationError(pastIssues));
+          }
+          return applyEdit(repos, task, details, placement);
         }),
       );
     },
@@ -675,6 +825,7 @@ export function createTaskService({ db, now, generateId, timeZone }: TaskService
             placementType: 'carryOver',
             priority: null,
             carryOverOrder,
+            reminder: shiftExactReminder(task.reminder, daysBetween(fromDate, toDate)),
             updatedAt: occurredAt,
           };
           const event: PostponedEvent = {

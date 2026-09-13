@@ -856,6 +856,129 @@ describe('TaskService', () => {
     });
   });
 
+  describe('reminder rules', () => {
+    it('rejects an exact reminder that is already in the past', async () => {
+      const error = unwrapError(
+        await service.createTask({
+          title: 'Late',
+          scheduledDate: TODAY,
+          priority: 5,
+          reminder: { type: 'exact', localDateTime: '2026-09-11T09:30' },
+        }),
+      );
+
+      expect(error).toMatchObject({
+        type: 'ValidationError',
+        issues: [{ field: 'reminder', message: 'Choose a reminder time in the future' }],
+      });
+      expect(await service.getDeck(TODAY)).toEqual([]);
+    });
+
+    it('rejects changing a reminder to a past time without saving', async () => {
+      const task = await create({ reminder: { type: 'exact', localDateTime: '2026-09-11T18:00' } });
+
+      const error = unwrapError(
+        await service.updateTask(task.id, {
+          title: 'Renamed',
+          reminder: { type: 'exact', localDateTime: '2026-09-10T18:00' },
+        }),
+      );
+
+      expect(error).toMatchObject({ type: 'ValidationError', issues: [{ field: 'reminder' }] });
+      expect(unwrap(await service.getTask(task.id))).toEqual(task);
+    });
+
+    it('moves an exact reminder with the task on Not tonight and back on Undo', async () => {
+      const task = await create({ reminder: { type: 'exact', localDateTime: '2026-09-11T18:00' } });
+
+      const { task: moved, event } = unwrap(await service.postponeUntilTomorrow(task.id));
+
+      expect(moved.reminder).toEqual({
+        type: 'exact',
+        localDateTime: '2026-09-12T18:00',
+        timeZone: BERLIN,
+      });
+      expect(unwrap(await service.undo(event.id))).toEqual(task);
+    });
+
+    it('snoozes a reminder without moving the task and records it in history', async () => {
+      const task = await create({
+        priority: 7,
+        reminder: { type: 'dayPeriod', period: 'evening' },
+      });
+
+      const { task: snoozed, event } = unwrap(
+        await service.snoozeReminder(task.id, '2026-09-12T09:00'),
+      );
+
+      expect(snoozed).toMatchObject({
+        scheduledDate: TODAY,
+        placementType: 'ranked',
+        priority: 7,
+        reminder: { type: 'exact', localDateTime: '2026-09-12T09:00', timeZone: BERLIN },
+      });
+      expect(await service.getHistory(task.id)).toEqual([event]);
+      expect(event).toMatchObject({
+        type: 'reminderSnoozed',
+        previousReminder: task.reminder,
+        reminder: snoozed.reminder,
+      });
+      expect(unwrap(await service.undo(event.id))).toEqual(task);
+    });
+
+    it('rejects snoozing to the past or snoozing a Future task', async () => {
+      const task = await create();
+      const future = await createFuture();
+
+      expect(unwrapError(await service.snoozeReminder(task.id, '2026-09-11T07:00'))).toMatchObject({
+        type: 'ValidationError',
+        issues: [{ field: 'reminder' }],
+      });
+      expect(
+        unwrapError(await service.snoozeReminder(future.id, '2026-09-12T07:00')),
+      ).toMatchObject({ type: 'InvalidTaskState', action: 'snooze', reason: 'future' });
+    });
+
+    it('rebases reminders to a new time zone and keeps the local time', async () => {
+      const exact = await create({
+        priority: 9,
+        reminder: { type: 'exact', localDateTime: '2026-09-11T19:30' },
+      });
+      const period = await create({
+        priority: 8,
+        reminder: { type: 'dayPeriod', period: 'night' },
+      });
+      await create({ priority: 7 });
+
+      const changed = unwrap(await service.rebaseReminderTimeZones('America/New_York'));
+
+      expect(changed).toEqual([exact.id, period.id]);
+      expect(unwrap(await service.getTask(exact.id)).reminder).toEqual({
+        type: 'exact',
+        localDateTime: '2026-09-11T19:30',
+        timeZone: 'America/New_York',
+      });
+      expect(unwrap(await service.getTask(period.id)).reminder).toEqual({
+        type: 'dayPeriod',
+        period: 'night',
+        timeZone: 'America/New_York',
+      });
+      expect(unwrap(await service.rebaseReminderTimeZones('America/New_York'))).toEqual([]);
+    });
+
+    it('notifies listeners after committed changes only', async () => {
+      const listener = jest.fn();
+      const unsubscribe = service.onChange(listener);
+
+      await create();
+      await service.createTask({ title: '', scheduledDate: TODAY, priority: 1 });
+      unsubscribe();
+      await create({ priority: 2 });
+
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('undo', () => {
     it('restores a completed task exactly and removes the completion event', async () => {
       const task = await create({ priority: 4 });

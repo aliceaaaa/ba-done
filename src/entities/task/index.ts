@@ -1,9 +1,11 @@
 export * from './model/types';
 export * from './model/task-errors';
 export { compareDeckPositions, toDeckPosition } from './model/deck-position';
-export { createTaskService } from './model/task-service';
+export { createTaskService, REMINDER_IN_PAST_MESSAGE } from './model/task-service';
+export { parseReminder } from './lib/reminder-json';
 export type {
   CompleteResult,
+  SnoozeResult,
   PostponeResult,
   SwappedTasks,
   TaskResult,

@@ -1,5 +1,5 @@
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { useTaskService, type ScheduledTask } from '@/entities/task';
 
@@ -15,6 +15,14 @@ export function useDeck(date: string) {
     useCallback(() => {
       void reload();
     }, [reload]),
+  );
+
+  useEffect(
+    () =>
+      service.onChange(() => {
+        void reload();
+      }),
+    [service, reload],
   );
 
   return { deck, reload };

@@ -141,7 +141,17 @@ export type CompletedEvent = {
   occurredAt: string;
 };
 
-export type TaskEvent = PostponedEvent | CompletedEvent;
+export type ReminderSnoozedEvent = {
+  id: string;
+  taskId: string;
+  type: 'reminderSnoozed';
+  previousReminder: TaskReminder | null;
+  reminder: TaskReminder;
+  previousUpdatedAt: string | null;
+  occurredAt: string;
+};
+
+export type TaskEvent = PostponedEvent | CompletedEvent | ReminderSnoozedEvent;
 
 export type PrioritySlot = {
   priority: number;

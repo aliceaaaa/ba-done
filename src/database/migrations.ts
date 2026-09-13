@@ -183,11 +183,89 @@ const addCarryOverReturnNotices: Migration = async (db) => {
   `);
 };
 
+const addReminderScheduling: Migration = async (db) => {
+  await db.exec(`
+    CREATE TABLE task_events_next (
+      id TEXT PRIMARY KEY NOT NULL,
+      task_id TEXT NOT NULL REFERENCES tasks (id) ON DELETE CASCADE,
+      type TEXT NOT NULL CHECK (type IN ('postponed', 'completed', 'reminderSnoozed')),
+      from_date TEXT CHECK (from_date IS NULL OR from_date IS date(from_date)),
+      to_date TEXT CHECK (to_date IS NULL OR to_date IS date(to_date)),
+      from_placement_type TEXT CHECK (
+        from_placement_type IS NULL OR from_placement_type IN ('ranked', 'carryOver')
+      ),
+      from_priority INTEGER,
+      from_carry_over_order INTEGER,
+      previous_updated_at TEXT,
+      details TEXT CHECK (details IS NULL OR json_valid(details)),
+      occurred_at TEXT NOT NULL,
+      CHECK (
+        (type = 'postponed' AND from_date IS NOT NULL AND to_date IS NOT NULL
+          AND to_date > from_date AND details IS NULL
+          AND (
+            (from_placement_type = 'ranked' AND from_priority BETWEEN 1 AND 10
+              AND from_carry_over_order IS NULL)
+            OR (from_placement_type = 'carryOver' AND from_carry_over_order >= 1
+              AND from_priority IS NULL)
+          ))
+        OR (type = 'completed' AND to_date IS NULL AND from_placement_type IS NULL
+          AND from_priority IS NULL AND from_carry_over_order IS NULL AND details IS NULL)
+        OR (type = 'reminderSnoozed' AND from_date IS NULL AND to_date IS NULL
+          AND from_placement_type IS NULL AND from_priority IS NULL
+          AND from_carry_over_order IS NULL AND details IS NOT NULL)
+      )
+    );
+
+    INSERT INTO task_events_next (
+      id, task_id, type, from_date, to_date, from_placement_type,
+      from_priority, from_carry_over_order, previous_updated_at, details, occurred_at
+    )
+    SELECT
+      id, task_id, type, from_date, to_date, from_placement_type,
+      from_priority, from_carry_over_order, previous_updated_at, NULL, occurred_at
+    FROM task_events;
+
+    DROP TABLE task_events;
+
+    ALTER TABLE task_events_next RENAME TO task_events;
+
+    CREATE INDEX task_events_arrival_idx ON task_events (task_id, to_date, occurred_at);
+    CREATE INDEX task_events_latest_idx ON task_events (task_id, occurred_at);
+
+    CREATE TABLE reminder_schedules (
+      task_id TEXT PRIMARY KEY NOT NULL,
+      status TEXT NOT NULL CHECK (
+        status IN ('notScheduled', 'scheduled', 'permissionDenied', 'failed')
+      ),
+      notification_id TEXT,
+      fire_at TEXT,
+      fingerprint TEXT,
+      scheduled_at TEXT,
+      error TEXT,
+      updated_at TEXT NOT NULL,
+      CHECK ((status = 'scheduled') = (notification_id IS NOT NULL AND scheduled_at IS NOT NULL))
+    );
+
+    CREATE TABLE app_settings (
+      key TEXT PRIMARY KEY NOT NULL,
+      value TEXT NOT NULL
+    );
+
+    CREATE TABLE notification_responses (
+      response_id TEXT PRIMARY KEY NOT NULL,
+      action TEXT NOT NULL,
+      task_id TEXT,
+      processed_at TEXT NOT NULL
+    );
+  `);
+};
+
 export const migrations: readonly Migration[] = [
   createTasksSchema,
   addCompletionEvents,
   addSoftDeleteAndCheckableThings,
   addCarryOverReturnNotices,
+  addReminderScheduling,
 ];
 
 export async function migrateDatabase(
