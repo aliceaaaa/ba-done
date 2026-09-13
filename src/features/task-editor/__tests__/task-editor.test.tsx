@@ -101,20 +101,35 @@ describe('TaskEditor', () => {
     });
   });
 
-  it('shows a clear error for a reminder with a date on a Future task', async () => {
+  it('does not offer a reminder with a date for a Future task', async () => {
     await renderApp(service, '/task/new?placement=future');
     await screen.findByTestId('task-editor');
 
-    await fireEvent.changeText(screen.getByLabelText('Title'), 'Trip');
+    expect(screen.queryByRole('radio', { name: 'At a date and time' })).toBeNull();
+    expect(screen.queryByLabelText('Reminder date')).toBeNull();
+    expect(screen.queryByLabelText('Reminder time')).toBeNull();
+    expect(screen.getByRole('radio', { name: 'No reminder' })).toBeSelected();
+    expect(screen.getByRole('radio', { name: 'At a time of day' })).toBeTruthy();
+  });
+
+  it('hides the dated reminder fields when a day task is switched to Future', async () => {
+    await renderApp(service, `/task/new?date=${TODAY}`);
+    await screen.findByTestId('task-editor');
+
     await fireEvent.press(screen.getByRole('radio', { name: 'At a date and time' }));
-    await fireEvent.changeText(screen.getByLabelText('Reminder date'), '2026-09-20');
-    await fireEvent.changeText(screen.getByLabelText('Reminder time'), '10:00');
+    expect(screen.getByLabelText('Reminder date')).toBeTruthy();
+
+    await fireEvent.press(screen.getByRole('radio', { name: 'Future' }));
+
+    expect(screen.queryByRole('radio', { name: 'At a date and time' })).toBeNull();
+    expect(screen.queryByLabelText('Reminder date')).toBeNull();
+    expect(screen.getByRole('radio', { name: 'No reminder' })).toBeSelected();
+
+    await fireEvent.changeText(screen.getByLabelText('Title'), 'Someday');
     await save();
 
-    expect(
-      await screen.findByText('A reminder with a date cannot be set for a Future task'),
-    ).toBeTruthy();
-    expect(await service.getFuturePool()).toEqual([]);
+    await waitFor(async () => expect(await service.getFuturePool()).toHaveLength(1));
+    expect((await service.getFuturePool())[0]?.reminder).toBeNull();
   });
 
   it('loads the current values of an existing task', async () => {
@@ -252,7 +267,24 @@ describe('TaskEditor', () => {
     expect(await service.getDeck(TODAY)).toEqual([]);
   });
 
-  it('asks before turning off a dated reminder when moving a task to Future', async () => {
+  it('keeps the task and its reminder when moving to Future is cancelled', async () => {
+    const alert = mockAlert();
+    const task = await create({ reminder: { type: 'dayPeriod', period: 'evening' } });
+    await openEditor(task.id);
+
+    await fireEvent.press(screen.getByRole('radio', { name: 'Future' }));
+    await save();
+
+    await waitFor(() =>
+      expect(alert).toHaveBeenCalledWith('Move to Future?', expect.any(String), expect.any(Array)),
+    );
+    await pressAlertButton(alert, 'Cancel');
+
+    expect(unwrap(await service.getTask(task.id))).toEqual(task);
+    expect(screen.getByTestId('task-editor')).toBeTruthy();
+  });
+
+  it('asks before turning off a reminder when moving a task to Future', async () => {
     const alert = mockAlert();
     const task = await create({ reminder: { type: 'exact', localDateTime: '2026-09-11T18:00' } });
     await openEditor(task.id);

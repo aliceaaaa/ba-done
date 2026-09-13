@@ -18,9 +18,11 @@ import { TextButton } from '@/shared/ui/text-button';
 import { colors, spacing } from '@/shared/ui/theme';
 
 import {
+  allowsDatedReminder,
   createEditorValues,
   editorValuesFromTask,
   placementChangeFor,
+  selectPlacementMode,
   toDetailsDraft,
   type EditorValues,
   type PlacementMode,
@@ -87,13 +89,13 @@ export function TaskEditor(props: TaskEditorProps) {
     };
   }, [service, values.placementMode, values.scheduledDate, exceptTaskId, slotsVersion]);
 
-  function submit(clearDatedReminder: boolean): Promise<TaskResult<Task>> {
+  function submit(clearReminder: boolean): Promise<TaskResult<Task>> {
     const initial = props.mode === 'edit' ? initialValues : null;
     const details = toDetailsDraft(values, initial);
     if (props.mode === 'edit') {
       return service.editTask(props.task.id, {
         ...details,
-        placement: placementChangeFor(props.task, values, clearDatedReminder),
+        placement: placementChangeFor(props.task, values, clearReminder),
       });
     }
     if (values.placementMode === 'future') {
@@ -106,16 +108,16 @@ export function TaskEditor(props: TaskEditorProps) {
     });
   }
 
-  async function save(clearDatedReminder = false) {
+  async function save(clearReminder = false) {
     setSaving(true);
-    const result = await submit(clearDatedReminder);
+    const result = await submit(clearReminder);
     setSaving(false);
     if (result.ok) {
       props.onSaved(result.value);
       return;
     }
-    if (result.error.type === 'ReminderRequiresDate') {
-      Alert.alert('Move to Future?', 'The reminder with a date will be turned off.', [
+    if (result.error.type === 'ReminderClearRequired') {
+      Alert.alert('Move to Future?', 'The reminder of this task will be turned off.', [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Turn off and move', style: 'destructive', onPress: () => void save(true) },
       ]);
@@ -175,7 +177,7 @@ export function TaskEditor(props: TaskEditorProps) {
           accessibilityLabel="Placement"
           options={PLACEMENT_OPTIONS}
           selected={values.placementMode}
-          onSelect={(placementMode) => setValues({ ...values, placementMode })}
+          onSelect={(placementMode) => setValues(selectPlacementMode(values, placementMode))}
         />
         {values.placementMode === 'day' ? (
           <View style={styles.group}>
@@ -223,7 +225,12 @@ export function TaskEditor(props: TaskEditorProps) {
         items={values.things}
         onChange={(things) => setValues({ ...values, things })}
       />
-      <ReminderFields values={values} onChange={setValues} timeZone={service.getTimeZone()} />
+      <ReminderFields
+        values={values}
+        onChange={setValues}
+        timeZone={service.getTimeZone()}
+        allowDatedReminder={allowsDatedReminder(values.placementMode)}
+      />
       {error === null ? null : (
         <Text accessibilityRole="alert" style={styles.error}>
           {error}

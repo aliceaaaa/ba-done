@@ -109,12 +109,12 @@ export type UpdateTaskInput = TaskDetailsInput & { title?: string };
 export type PlacementChange =
   | { kind: 'keep' }
   | ({ kind: 'ranked' } & RankedSlotInput)
-  | { kind: 'future'; clearDatedReminder?: boolean };
+  | { kind: 'future'; clearReminder?: boolean };
 
 export type EditTaskInput = UpdateTaskInput & { placement: PlacementChange };
 
 export type MoveToFutureOptions = {
-  clearDatedReminder?: boolean;
+  clearReminder?: boolean;
 };
 
 export type PriorityAvailabilityOptions = {

@@ -17,6 +17,7 @@ import { colors, spacing } from '@/shared/ui/theme';
 
 import { withSentBackLast } from '../model/display-order';
 import { useDeck } from '../model/use-deck';
+import { useReturnNotices } from '../model/use-return-notices';
 import { SwipeableTaskCard } from './swipeable-task-card';
 import { UndoBar } from './undo-bar';
 
@@ -37,6 +38,7 @@ export function TodayScreen({ initialDate = null }: TodayScreenProps) {
   const today = useMemo(() => service.getToday(), [service]);
   const [date, setDate] = useState(initialDate ?? today);
   const { deck, reload } = useDeck(date);
+  const returnNoticeIds = useReturnNotices(date);
   const [sentBackIds, setSentBackIds] = useState<string[]>([]);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [cardsVersion, setCardsVersion] = useState(0);
@@ -118,6 +120,7 @@ export function TodayScreen({ initialDate = null }: TodayScreenProps) {
             key={`${task.id}:${cardsVersion}`}
             task={task}
             phase={sentBackIds.includes(task.id) ? 'sendingBack' : 'idle'}
+            showReturnMessage={returnNoticeIds.includes(task.id)}
             onOpen={openTask}
             onDone={handleDone}
             onSendBack={handleSendBack}

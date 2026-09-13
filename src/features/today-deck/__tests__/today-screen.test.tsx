@@ -4,6 +4,7 @@ import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-han
 
 import type { NodeSqliteDatabase } from '@/database/testing/node-sqlite-database';
 import type { CreateTaskInput, RankedTask, TaskService } from '@/entities/task';
+import { RETURN_NOTICE_MS } from '@/features/today-deck/model/use-return-notices';
 import {
   TODAY,
   TOMORROW,
@@ -117,6 +118,35 @@ describe('Your matches', () => {
     expect(rankedCard.queryByText('Mega Crush')).toBeNull();
     expect(rankedCard.getByLabelText('Priority 9')).toBeTruthy();
   });
+
+  it('shows "Match made in heaven" only once for a task and day, even after a restart', async () => {
+    const [carried] = await carryIntoToday('Returned');
+    const carriedId = carried?.id ?? '';
+
+    await showToday(service, [carriedId]);
+    const firstCard = within(screen.getByTestId(`task-card-${carriedId}`));
+    expect(await firstCard.findByText('Match made in heaven')).toBeTruthy();
+    screen.unmount();
+
+    await showToday(createTestService(db, { idPrefix: 'restart' }), [carriedId]);
+    const secondCard = within(screen.getByTestId(`task-card-${carriedId}`));
+    expect(secondCard.getByText('Mega Crush')).toBeTruthy();
+    expect(secondCard.queryByText('Match made in heaven')).toBeNull();
+  });
+
+  it('keeps "Mega Crush" visible after "Match made in heaven" disappears', async () => {
+    const [carried] = await carryIntoToday('Returned');
+    const carriedId = carried?.id ?? '';
+    await showToday(service, [carriedId]);
+    const card = within(screen.getByTestId(`task-card-${carriedId}`));
+    expect(await card.findByText('Match made in heaven')).toBeTruthy();
+
+    await waitFor(() => expect(card.queryByText('Match made in heaven')).toBeNull(), {
+      timeout: RETURN_NOTICE_MS + 2000,
+    });
+
+    expect(card.getByText('Mega Crush')).toBeTruthy();
+  }, 15000);
 
   it('shows the exact time or the day period only when they are set', async () => {
     const exact = await create({ title: 'Exact', priority: 9, exactTime: '07:30' });

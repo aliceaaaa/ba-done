@@ -62,8 +62,8 @@ export type UndoNotAvailable = {
   message: string;
 };
 
-export type ReminderRequiresDate = {
-  type: 'ReminderRequiresDate';
+export type ReminderClearRequired = {
+  type: 'ReminderClearRequired';
   id: string;
   message: string;
 };
@@ -75,7 +75,7 @@ export type TaskError =
   | InvalidTaskState
   | SwapNotAllowed
   | UndoNotAvailable
-  | ReminderRequiresDate;
+  | ReminderClearRequired;
 
 export function validationError(issues: ValidationIssue[]): TaskValidationError {
   return {
@@ -147,10 +147,10 @@ export function undoNotAvailable(
   return { type: 'UndoNotAvailable', eventId, reason, message: UNDO_MESSAGES[reason] };
 }
 
-export function reminderRequiresDate(id: string): ReminderRequiresDate {
+export function reminderClearRequired(id: string): ReminderClearRequired {
   return {
-    type: 'ReminderRequiresDate',
+    type: 'ReminderClearRequired',
     id,
-    message: 'This task has a reminder with a date. Turn it off to move the task to Future.',
+    message: 'This task has a reminder. Turn it off to move the task to Future.',
   };
 }

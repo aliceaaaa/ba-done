@@ -6,9 +6,10 @@ import { colors, spacing } from '@/shared/ui/theme';
 
 type TaskCardProps = {
   task: ScheduledTask;
+  showReturnMessage: boolean;
 };
 
-export function TaskCard({ task }: TaskCardProps) {
+export function TaskCard({ task, showReturnMessage }: TaskCardProps) {
   const time = taskTimeLabel(task);
   return (
     <View style={styles.card}>
@@ -24,7 +25,7 @@ export function TaskCard({ task }: TaskCardProps) {
           <Text style={styles.megaCrush}>{UI_STRINGS.carryOverLabel}</Text>
         )}
       </View>
-      {task.placementType === 'carryOver' ? (
+      {task.placementType === 'carryOver' && showReturnMessage ? (
         <Text style={styles.returnMessage}>{UI_STRINGS.carryOverReturn}</Text>
       ) : null}
       {time === null ? null : <Text style={styles.time}>{time}</Text>}

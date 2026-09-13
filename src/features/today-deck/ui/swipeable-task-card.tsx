@@ -27,6 +27,7 @@ const SLIDE_DURATION_MS = 180;
 type SwipeableTaskCardProps = {
   task: ScheduledTask;
   phase: CardPhase;
+  showReturnMessage: boolean;
   onOpen: (task: ScheduledTask) => void;
   onDone: (task: ScheduledTask) => void;
   onSendBack: (task: ScheduledTask) => void;
@@ -36,6 +37,7 @@ type SwipeableTaskCardProps = {
 export function SwipeableTaskCard({
   task,
   phase,
+  showReturnMessage,
   onOpen,
   onDone,
   onSendBack,
@@ -126,7 +128,7 @@ export function SwipeableTaskCard({
           onPress={() => onOpen(task)}
           testID={`open-task-${task.id}`}
         >
-          <TaskCard task={task} />
+          <TaskCard task={task} showReturnMessage={showReturnMessage} />
         </Pressable>
       </Animated.View>
     </GestureDetector>

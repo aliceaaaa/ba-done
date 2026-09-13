@@ -86,17 +86,35 @@ export function TimeFields({ values, onChange }: FieldsProps) {
   );
 }
 
-export function ReminderFields({ values, onChange, timeZone }: FieldsProps & { timeZone: string }) {
+type ReminderFieldsProps = FieldsProps & {
+  timeZone: string;
+  allowDatedReminder: boolean;
+};
+
+export function ReminderFields({
+  values,
+  onChange,
+  timeZone,
+  allowDatedReminder,
+}: ReminderFieldsProps) {
+  const options = allowDatedReminder
+    ? REMINDER_MODE_OPTIONS
+    : REMINDER_MODE_OPTIONS.filter((option) => option.value !== 'exact');
   return (
     <View style={styles.group}>
       <Text style={styles.label}>Reminder</Text>
       <ChipRow
         accessibilityLabel="Reminder"
-        options={REMINDER_MODE_OPTIONS}
+        options={options}
         selected={values.reminderMode}
         onSelect={(reminderMode) => onChange({ ...values, reminderMode })}
       />
-      {values.reminderMode === 'exact' ? (
+      {allowDatedReminder ? null : (
+        <Text style={styles.hint}>
+          A reminder with a date is available once the task has a day.
+        </Text>
+      )}
+      {allowDatedReminder && values.reminderMode === 'exact' ? (
         <View style={styles.pair}>
           <LabeledInput
             label="Reminder date"

@@ -172,10 +172,22 @@ const addSoftDeleteAndCheckableThings: Migration = async (db) => {
   `);
 };
 
+const addCarryOverReturnNotices: Migration = async (db) => {
+  await db.exec(`
+    CREATE TABLE carry_over_return_notices (
+      task_id TEXT NOT NULL REFERENCES tasks (id) ON DELETE CASCADE,
+      scheduled_date TEXT NOT NULL CHECK (scheduled_date IS date(scheduled_date)),
+      shown_at TEXT NOT NULL,
+      PRIMARY KEY (task_id, scheduled_date)
+    );
+  `);
+};
+
 export const migrations: readonly Migration[] = [
   createTasksSchema,
   addCompletionEvents,
   addSoftDeleteAndCheckableThings,
+  addCarryOverReturnNotices,
 ];
 
 export async function migrateDatabase(

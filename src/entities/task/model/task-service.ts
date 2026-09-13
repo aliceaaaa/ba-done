@@ -2,6 +2,7 @@ import type { SqlDatabase, SqlExecutor } from '@/database/sql-database';
 import { addDays, toLocalDate } from '@/shared/lib/local-date';
 import { err, ok, type Result } from '@/shared/lib/result';
 
+import { createReturnNoticeRepository } from '../api/return-notice-repository';
 import { createTaskEventRepository, type TaskEventRepository } from '../api/task-event-repository';
 import {
   createTaskRepository,
@@ -12,7 +13,7 @@ import { compareDeckPositions, toDeckPosition } from './deck-position';
 import {
   invalidTaskState,
   priorityConflict,
-  reminderRequiresDate,
+  reminderClearRequired,
   swapNotAllowed,
   taskNotFound,
   undoNotAvailable,
@@ -89,6 +90,7 @@ export type TaskService = {
   getDeck(scheduledDate: string): Promise<ScheduledTask[]>;
   getFuturePool(): Promise<FutureTask[]>;
   getHistory(id: string): Promise<TaskEvent[]>;
+  claimReturnNotices(scheduledDate: string): Promise<string[]>;
   getPriorityAvailability(
     scheduledDate: string,
     options?: PriorityAvailabilityOptions,
@@ -370,13 +372,12 @@ export function createTaskService({ db, now, generateId, timeZone }: TaskService
     repos: Repositories,
     task: Task,
     details: TaskDetails,
-    clearDatedReminder: boolean,
+    clearReminder: boolean,
   ): Promise<TaskResult<FutureTask>> {
-    const hasDatedReminder = details.reminder?.type === 'exact';
-    if (hasDatedReminder && !clearDatedReminder) {
-      return err(reminderRequiresDate(task.id));
+    if (task.reminder !== null && !clearReminder) {
+      return err(reminderClearRequired(task.id));
     }
-    const validated = validateDetails(hasDatedReminder ? { ...details, reminder: null } : details, {
+    const validated = validateDetails(clearReminder ? { ...details, reminder: null } : details, {
       isFuture: true,
     });
     if (!validated.ok) {
@@ -402,7 +403,7 @@ export function createTaskService({ db, now, generateId, timeZone }: TaskService
       return placeRanked(repos, task, change, details);
     }
     if (change.kind === 'future' && isScheduledTask(task)) {
-      return moveToFuture(repos, task, details, change.clearDatedReminder ?? false);
+      return moveToFuture(repos, task, details, change.clearReminder ?? false);
     }
     return saveDetails(repos, task, details);
   }
@@ -431,6 +432,18 @@ export function createTaskService({ db, now, generateId, timeZone }: TaskService
 
     getHistory(id) {
       return createTaskEventRepository(db).listByTask(id);
+    },
+
+    claimReturnNotices(scheduledDate) {
+      return db.transaction(async (tx) => {
+        const notices = createReturnNoticeRepository(tx);
+        const taskIds = await notices.listUnshown(scheduledDate);
+        const shownAt = timestamp();
+        for (const taskId of taskIds) {
+          await notices.markShown(taskId, scheduledDate, shownAt);
+        }
+        return taskIds;
+      });
     },
 
     async getPriorityAvailability(scheduledDate, options = {}) {
@@ -722,12 +735,7 @@ export function createTaskService({ db, now, generateId, timeZone }: TaskService
           if (!isScheduledTask(task)) {
             return err(invalidTaskState(task.id, 'moveToFuture', 'future'));
           }
-          return moveToFuture(
-            repos,
-            task,
-            detailsFromTask(task),
-            options.clearDatedReminder ?? false,
-          );
+          return moveToFuture(repos, task, detailsFromTask(task), options.clearReminder ?? false);
         }),
       );
     },

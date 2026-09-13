@@ -1058,20 +1058,45 @@ describe('TaskService', () => {
       expect(await service.getHistory(task.id)).toEqual([event]);
     });
 
-    it('asks before turning off a reminder with a date when moving to Future', async () => {
-      const task = await create({
-        reminder: { type: 'exact', localDateTime: '2026-09-11T18:00' },
-      });
+    it.each([
+      ['a reminder with a date', { type: 'exact', localDateTime: '2026-09-11T18:00' } as const],
+      ['a day-period reminder', { type: 'dayPeriod', period: 'evening' } as const],
+    ])('requires confirmation to clear %s when moving to Future', async (_label, reminder) => {
+      const task = await create({ reminder });
 
       expect(unwrapError(await service.moveTaskToFuture(task.id))).toMatchObject({
-        type: 'ReminderRequiresDate',
+        type: 'ReminderClearRequired',
         id: task.id,
       });
       expect(unwrap(await service.getTask(task.id))).toEqual(task);
 
-      const moved = unwrap(await service.moveTaskToFuture(task.id, { clearDatedReminder: true }));
+      const moved = unwrap(await service.moveTaskToFuture(task.id, { clearReminder: true }));
 
-      expect(moved).toMatchObject({ scheduledDate: null, reminder: null });
+      expect(moved).toMatchObject({ scheduledDate: null, priority: null, reminder: null });
+      expect(unwrap(await service.getTask(task.id))).toEqual(moved);
+    });
+
+    it('moves a task without a reminder to Future without confirmation', async () => {
+      const task = await create();
+
+      expect(unwrap(await service.moveTaskToFuture(task.id))).toMatchObject({
+        scheduledDate: null,
+        reminder: null,
+      });
+    });
+
+    it('still rejects a reminder with a date added while moving to Future', async () => {
+      const task = await create();
+
+      const error = unwrapError(
+        await service.editTask(task.id, {
+          reminder: { type: 'exact', localDateTime: '2026-09-20T10:00' },
+          placement: { kind: 'future' },
+        }),
+      );
+
+      expect(error).toMatchObject({ type: 'ValidationError', issues: [{ field: 'reminder' }] });
+      expect(unwrap(await service.getTask(task.id))).toEqual(task);
     });
 
     it('converts a Mega Crush task into a ranked task', async () => {
@@ -1218,6 +1243,45 @@ describe('TaskService', () => {
 
       expect(future).toMatchObject({ scheduledDate: null, priority: null });
       expect(scheduled).toMatchObject({ scheduledDate: TOMORROW, priority: 7 });
+    });
+  });
+
+  describe('claimReturnNotices', () => {
+    it('returns each carry-over task once per task and date', async () => {
+      const first = await create({ title: 'First', priority: 9 });
+      const second = await create({ title: 'Second', priority: 8 });
+      await create({ title: 'Ranked', scheduledDate: TOMORROW, priority: 3 });
+      unwrap(await service.postponeUntilTomorrow(first.id));
+      unwrap(await service.postponeUntilTomorrow(second.id));
+
+      expect(await service.claimReturnNotices(TOMORROW)).toEqual([first.id, second.id]);
+      expect(await service.claimReturnNotices(TOMORROW)).toEqual([]);
+      expect(await buildService(db, { idPrefix: 'restart' }).claimReturnNotices(TOMORROW)).toEqual(
+        [],
+      );
+    });
+
+    it('returns the task again when it returns on another day', async () => {
+      const task = await create();
+      unwrap(await service.postponeUntilTomorrow(task.id));
+      expect(await service.claimReturnNotices(TOMORROW)).toEqual([task.id]);
+
+      const nextDay = buildService(db, { start: '2026-09-12T08:00:00.000Z', idPrefix: 'next' });
+      unwrap(await nextDay.postponeUntilTomorrow(task.id));
+
+      expect(await service.claimReturnNotices('2026-09-13')).toEqual([task.id]);
+    });
+
+    it('ignores ranked, completed and deleted tasks', async () => {
+      const completed = await create({ priority: 9 });
+      const deleted = await create({ priority: 8 });
+      unwrap(await service.postponeUntilTomorrow(completed.id));
+      unwrap(await service.postponeUntilTomorrow(deleted.id));
+      unwrap(await service.completeTask(completed.id));
+      unwrap(await service.deleteTask(deleted.id));
+      await create({ scheduledDate: TOMORROW, priority: 2 });
+
+      expect(await service.claimReturnNotices(TOMORROW)).toEqual([]);
     });
   });
 

@@ -111,6 +111,22 @@ export function selectDayPeriod(values: EditorValues, dayPeriod: DayPeriod): Edi
   return { ...values, timeMode: 'period', dayPeriod, exactTime: '' };
 }
 
+export function allowsDatedReminder(placementMode: PlacementMode): boolean {
+  return placementMode === 'day';
+}
+
+export function selectPlacementMode(
+  values: EditorValues,
+  placementMode: PlacementMode,
+): EditorValues {
+  const dropsDatedReminder = !allowsDatedReminder(placementMode) && values.reminderMode === 'exact';
+  return {
+    ...values,
+    placementMode,
+    reminderMode: dropsDatedReminder ? 'none' : values.reminderMode,
+  };
+}
+
 export function reminderInputOf(values: EditorValues): ReminderInput | null {
   if (values.reminderMode === 'exact') {
     return {
@@ -147,10 +163,10 @@ export function toDetailsDraft(values: EditorValues, initial: EditorValues | nul
 export function placementChangeFor(
   task: Task,
   values: EditorValues,
-  clearDatedReminder: boolean,
+  clearReminder: boolean,
 ): PlacementChange {
   if (values.placementMode === 'future') {
-    return task.scheduledDate === null ? { kind: 'keep' } : { kind: 'future', clearDatedReminder };
+    return task.scheduledDate === null ? { kind: 'keep' } : { kind: 'future', clearReminder };
   }
   const keepsCarryOver =
     task.placementType === 'carryOver' &&
