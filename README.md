@@ -168,6 +168,77 @@ Dates and times are edited with `@react-native-community/datetimepicker` (compac
 
 All required strings live in `src/shared/config/ui-strings.ts` and must be used verbatim.
 
+## Lists
+
+Lists are separate from tasks: a list item never has a priority, date, reminder or placement, and changing it never creates a task.
+
+| Entity     | Fields                                                                                                   |
+| ---------- | -------------------------------------------------------------------------------------------------------- |
+| `List`     | `id`, `title`, `kind` (`shopping` \| `custom`), `color`, `icon`, `createdAt`, `updatedAt`, `archivedAt`, `deletedAt` |
+| `ListItem` | `id`, `listId`, `title`, `quantity`, `unit`, `note`, `checked`, `position`, `createdAt`, `updatedAt`, `checkedAt`, `deletedAt` |
+
+Rules (`ListService`, `src/entities/list`):
+
+- A `Shopping` list is created lazily on the first read of the lists.
+- A list title is required; duplicate item titles inside a list are allowed.
+- New items go to the end of the active items; active items are shown above checked ones. Active positions are contiguous and protected by a partial unique index; checking, unchecking, deleting and Move up / Move down update positions in one exclusive transaction.
+- `Shopping` (any list of kind `shopping`) cannot be deleted while it is the only shopping list.
+- Delete is a soft delete. Deleted and archived lists are hidden from the normal list overview; archived lists are read-only until restored and have their own screen.
+- `createListWithItem` creates a list and its first item atomically (used when a voice command names a list that does not exist and the user confirms “Create list”).
+
+The Lists tab (`/lists`) shows the lists, the list screen (`/list/<id>`) has quick text input (Enter/Done adds the next item and keeps the keyboard open), a microphone, a collapsible Completed section and Clear completed with confirmation.
+
+## Voice commands
+
+Voice input adds list items, Future tasks, ranked tasks and calendar events. It uses the system speech recognizer of the device through [`expo-speech-recognition`](https://github.com/jamsch/expo-speech-recognition) 57.0.0 (Apple `SFSpeechRecognizer`, Android `SpeechRecognizer`). There is no backend, no LLM and no audio storage.
+
+### Architecture
+
+| Piece                          | Location                                                         | Responsibility                                                                                                     |
+| ------------------------------ | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `SpeechRecognitionAdapter`     | `src/features/voice/model/speech-recognition-adapter.ts`         | The only boundary to the OS recognizer: availability, permissions, start/stop/cancel, partial/final/error/state events. |
+| Native adapter                 | `src/features/voice/api/native-speech-recognition-adapter.ts`    | Wraps `expo-speech-recognition`; loads the native module optionally, so a build without it reports “unavailable”. Always starts with `recordingOptions.persist: false`. |
+| Fake adapter                   | `src/features/voice/testing/fake-speech-recognition-adapter.ts`  | Test double.                                                                                                       |
+| `VoiceInputController`         | `src/features/voice/model/voice-input-controller.ts`             | One session at a time; states `idle`, `requestingPermission`, `listening`, `processing`, `result`, `cancelled`, `permissionDenied`, `unavailable`, `error`; stops on background; delivers one final result per session. |
+| `parseVoiceCommand`            | `src/features/voice/model/voice-command-parser.ts`               | Pure text → `VoiceCommandDraft`. English and Russian. No SQLite, no UI; `now`, time zone, lists and hints are passed in. |
+| `VoiceCommandExecutor`         | `src/features/voice/model/voice-command-executor.ts`             | Saves only through `TaskService`, `CalendarEventService`, `ListService`; deduplicates by command id; Undo.          |
+| `HandsFreeController`          | `src/features/voice/model/hands-free-controller.ts`              | Foreground-only wake phrase loop with limited retries and backoff.                                                 |
+| Voice Command Preview          | `/voice-command`                                                 | Editable draft with warnings, missing fields, Cancel and Save.                                                     |
+
+The wake phrases live in `src/shared/config/voice-config.ts` (`Hey app`, `Эй приложение`) and can be replaced by the app name later. The parser removes an optional wake phrase after a manual tap and requires it in hands-free mode.
+
+### Safety rules
+
+- Only an unambiguous list item and a Future task without date, priority and reminder are saved immediately (with a notice and Undo). Everything else opens Preview.
+- A ranked task never gets a guessed priority; a conflict shows the occupied priority and the free positions and never shifts tasks.
+- An event without an end gets a suggested end 60 minutes later, shown in Preview.
+- An unknown list is never created silently; similar list names ask for the exact list.
+- A missing date or event start must be chosen explicitly in Preview. Past reminders are rejected by the existing domain error.
+- Preview does not re-implement validation: Save goes through the domain services and shows their messages.
+
+### Microphone entry points
+
+“Your matches” (task for the selected day), Future (Future task), Calendar header and its Create menu (task or event for the selected day), and every list (list item). The type can be changed in Preview.
+
+### Hands-free
+
+Settings → Voice has “Listen for “Hey app” while the app is open”, off by default and stored locally in `app_settings`. It works only in the foreground with a visible banner and a one-tap stop. It never starts on launch: after a cold start the banner waits for “Start”. It stops when the app leaves the foreground, on audio interruptions (calls), on permission loss, after 5 consecutive errors (backoff 1–16 s) and after 20 silent restarts. This is **not** a background wake word; the app never listens while closed or in the background.
+
+### Privacy
+
+- Raw audio is never recorded or stored by the app. The system service may send audio to Apple or Google, and offline recognition depends on the device and installed languages; the UI never promises offline mode.
+- A transcript is kept in memory only while its Preview is open. There is no voice history table and no analytics; “Delete voice history” clears an open draft.
+- Permissions are requested only after tapping a microphone or turning on hands-free.
+
+### Permissions and rebuild
+
+`expo-speech-recognition` is a native module with a config plugin. Rebuild the development build (`npm run ios` / `npm run android`); Expo Go and older dev builds show “Voice input unavailable”.
+
+- iOS: `NSMicrophoneUsageDescription`, `NSSpeechRecognitionUsageDescription` (iOS 16.4+, the Expo SDK 57 minimum).
+- Android: `RECORD_AUDIO` and a `<queries>` entry for the Google speech service (minSdk 24).
+
+A manual QA checklist lives in [docs/voice-manual-qa.md](docs/voice-manual-qa.md).
+
 ## File naming
 
 Files and folders use kebab-case only: `screen-title.tsx`, `use-today-tasks.ts`.
