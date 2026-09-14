@@ -24,6 +24,7 @@ import ChangePriorityRoute from '@/app/task/[id]/priority';
 import RemindLaterRoute from '@/app/task/[id]/remind-later';
 import NewTaskRoute from '@/app/task/new';
 import VoiceCommandRoute from '@/app/voice-command';
+import VoiceEntryRoute from '@/app/voice-entry';
 import { migrateDatabase } from '@/database/migrations';
 import type { SqlDatabase } from '@/database/sql-database';
 import {
@@ -65,6 +66,16 @@ import {
   createFakeNotificationAdapter,
   type FakeNotificationAdapter,
 } from '@/features/reminders/testing/fake-notification-adapter';
+import {
+  SystemVoiceEntryHost,
+  SystemVoiceEntryProvider,
+  createSystemVoiceEntryServices,
+  type SystemVoiceEntryServices,
+} from '@/features/system-voice-entry';
+import {
+  createFakeNativeVoiceEntryBridge,
+  type FakeNativeVoiceEntryBridge,
+} from '@/features/system-voice-entry/testing/fake-native-voice-entry-bridge';
 import {
   VoiceHost,
   VoiceProvider,
@@ -266,9 +277,45 @@ export function createTestVoice(db: SqlDatabase, options: TestVoiceOptions): Tes
   return { services, adapter, appState, scheduler, openSettings };
 }
 
+export type TestSystemVoiceEntry = {
+  services: SystemVoiceEntryServices;
+  bridge: FakeNativeVoiceEntryBridge;
+  openVoiceSettings: jest.Mock<Promise<void>, []>;
+  openShortcutsApp: jest.Mock<Promise<void>, []>;
+};
+
+type TestSystemVoiceEntryOptions = {
+  voice: TestVoice;
+  lists: ListService;
+  now?: () => Date;
+  bridge?: FakeNativeVoiceEntryBridge;
+};
+
+export function createTestSystemVoiceEntry(
+  db: SqlDatabase,
+  options: TestSystemVoiceEntryOptions,
+): TestSystemVoiceEntry {
+  const bridge = options.bridge ?? createFakeNativeVoiceEntryBridge();
+  const openVoiceSettings = jest.fn(async () => undefined);
+  const openShortcutsApp = jest.fn(async () => undefined);
+  const services = createSystemVoiceEntryServices({
+    db,
+    voice: options.voice.services,
+    lists: options.lists,
+    bridge,
+    now: options.now ?? createTestClock(),
+    timeZone: () => TEST_TIME_ZONE,
+    generateId: createIdGenerator('entry-generated'),
+    openVoiceSettings,
+    openShortcutsApp,
+  });
+  return { services, bridge, openVoiceSettings, openShortcutsApp };
+}
+
 type RenderAppOptions = {
   lists?: ListService;
   voice?: TestVoice;
+  systemVoiceEntry?: TestSystemVoiceEntry;
 };
 
 export function renderApp(
@@ -279,7 +326,7 @@ export function renderApp(
   options: RenderAppOptions = {},
 ) {
   const events = reminders?.events ?? eventService;
-  const { lists, voice } = options;
+  const { lists, voice, systemVoiceEntry } = options;
 
   function withEvents(children: ReactNode) {
     return events === undefined ? (
@@ -295,8 +342,18 @@ export function renderApp(
         children
       ) : (
         <VoiceProvider services={voice.services}>
-          {children}
-          <VoiceHost />
+          {systemVoiceEntry === undefined ? (
+            <>
+              {children}
+              <VoiceHost />
+            </>
+          ) : (
+            <SystemVoiceEntryProvider services={systemVoiceEntry.services}>
+              {children}
+              <VoiceHost />
+              <SystemVoiceEntryHost />
+            </SystemVoiceEntryProvider>
+          )}
         </VoiceProvider>
       );
     return lists === undefined ? (
@@ -354,6 +411,7 @@ export function renderApp(
       'list/[id]/edit': EditListRoute,
       'list-item/[id]': EditListItemRoute,
       'voice-command': VoiceCommandRoute,
+      'voice-entry': VoiceEntryRoute,
     },
     { initialUrl },
   );

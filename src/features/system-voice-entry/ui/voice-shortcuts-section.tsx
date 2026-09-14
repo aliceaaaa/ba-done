@@ -14,7 +14,8 @@ export const VOICE_SHORTCUTS_TEXT = {
   explanation:
     'System voice shortcuts use Siri or Google Assistant. The app does not continuously listen in the background.',
   available: 'Available shortcuts',
-  siriHint: 'Say the phrase to Siri. Siri then asks for the details, for example the item or the task title.',
+  siriHint:
+    'Say the phrase to Siri. Siri then asks for the details, for example the item or the task title.',
   siriNeedsBuild: 'Siri shortcuts appear after installing a build that includes them.',
   openShortcuts: 'Open Shortcuts',
   androidStatus: 'Android availability',
@@ -25,7 +26,12 @@ export const VOICE_SHORTCUTS_TEXT = {
   openVoiceSettings: 'Open voice settings',
 } as const;
 
-export const ANDROID_LAUNCHER_SHORTCUTS = ['Voice capture', 'Add item', 'Capture task', 'Today'] as const;
+export const ANDROID_LAUNCHER_SHORTCUTS = [
+  'Voice capture',
+  'Add item',
+  'Capture task',
+  'Today',
+] as const;
 
 export function siriPhrases(appName: string): string[] {
   return [
@@ -90,7 +96,9 @@ function SectionContent({ services }: { services: SystemVoiceEntryServices }) {
 
       <TextButton
         label={VOICE_SHORTCUTS_TEXT.testCommand}
-        onPress={() => void services.inbox.receive({ version: 1, action: 'openVoiceCapture' }, 'shortcut')}
+        onPress={() =>
+          void services.inbox.receive({ version: 1, action: 'openVoiceCapture' }, 'shortcut')
+        }
       />
       <TextButton
         label={VOICE_SHORTCUTS_TEXT.openVoiceSettings}

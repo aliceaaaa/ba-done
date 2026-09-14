@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="voice_shortcut_capture_short">Voice capture</string>
+  <string name="voice_shortcut_capture_long">Start voice capture</string>
+  <string name="voice_shortcut_add_item_short">Add item</string>
+  <string name="voice_shortcut_add_item_long">Add an item to a list</string>
+  <string name="voice_shortcut_capture_task_short">Capture task</string>
+  <string name="voice_shortcut_capture_task_long">Capture a task</string>
+  <string name="voice_shortcut_today_short">Today</string>
+  <string name="voice_shortcut_today_long">Show today</string>
+</resources>

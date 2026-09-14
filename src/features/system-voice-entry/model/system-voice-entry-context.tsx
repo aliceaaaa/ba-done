@@ -1,7 +1,17 @@
-import { createContext, useCallback, useContext, useSyncExternalStore, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react';
 
 import type { SystemVoiceEntryAdapter } from './system-voice-entry-adapter';
-import type { NativeVoiceEntryBridge, VoiceEntryInbox, VoiceEntryInboxState } from './voice-entry-inbox';
+import type {
+  NativeVoiceEntryBridge,
+  VoiceEntryInbox,
+  VoiceEntryInboxState,
+} from './voice-entry-inbox';
 
 export type SystemVoiceEntryServices = {
   adapter: SystemVoiceEntryAdapter;

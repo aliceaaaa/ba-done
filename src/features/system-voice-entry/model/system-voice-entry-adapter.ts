@@ -19,7 +19,11 @@ import type {
   VoiceEntryIntentRepository,
 } from '../api/voice-entry-intent-repository';
 import { buildDraftFromVoiceEntry } from './voice-entry-draft';
-import { isTrustedVoiceEntry, type VoiceEntryIntent, type VoiceEntrySource } from './voice-entry-intent';
+import {
+  isTrustedVoiceEntry,
+  type VoiceEntryIntent,
+  type VoiceEntrySource,
+} from './voice-entry-intent';
 import { parseVoiceEntryPayload } from './voice-entry-payload';
 
 export const SYSTEM_VOICE_TEXT = {
@@ -87,7 +91,10 @@ export function canSystemEntrySaveImmediately(
       return canExecuteImmediately(draft);
     case 'rankedTask':
       return (
-        draft.date !== null && draft.date >= today && draft.priority !== null && draft.reminder === null
+        draft.date !== null &&
+        draft.date >= today &&
+        draft.priority !== null &&
+        draft.reminder === null
       );
     case 'calendarEvent':
       return draft.date !== null && draft.date >= today && draft.eventEnd !== null;
@@ -186,7 +193,10 @@ export function createSystemVoiceEntryAdapter(
       return finish(intent, { kind: 'navigate', destination: { screen: 'matches', date: today } });
     }
     if (intent.action === 'openVoiceCapture') {
-      return finish(intent, { kind: 'startVoiceCapture', hint: { kind: 'rankedTask', date: today } });
+      return finish(intent, {
+        kind: 'startVoiceCapture',
+        hint: { kind: 'rankedTask', date: today },
+      });
     }
     const lists = await loadLists();
     const draft = buildDraftFromVoiceEntry(intent, {
@@ -277,7 +287,9 @@ export function createSystemVoiceEntryAdapter(
           if (record.undoneAt !== null) {
             return true;
           }
-          const undone = await deps.executor.undo(undoFromRecord(record.entityKind, record.entityId));
+          const undone = await deps.executor.undo(
+            undoFromRecord(record.entityKind, record.entityId),
+          );
           if (undone) {
             await deps.repository.markUndone(intentId, deps.now().toISOString());
           }

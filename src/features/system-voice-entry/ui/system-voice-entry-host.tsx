@@ -5,7 +5,10 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { destinationHref, useOptionalVoice } from '@/features/voice';
 import { colors, spacing } from '@/shared/ui/theme';
 
-import { SYSTEM_VOICE_TEXT, type SystemVoiceEntryOutcome } from '../model/system-voice-entry-adapter';
+import {
+  SYSTEM_VOICE_TEXT,
+  type SystemVoiceEntryOutcome,
+} from '../model/system-voice-entry-adapter';
 import {
   useOptionalSystemVoiceEntry,
   useVoiceEntryInboxState,

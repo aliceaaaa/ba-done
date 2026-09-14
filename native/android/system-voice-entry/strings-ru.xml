@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="voice_shortcut_capture_short">Голосовой ввод</string>
+  <string name="voice_shortcut_capture_long">Начать голосовой ввод</string>
+  <string name="voice_shortcut_add_item_short">Добавить пункт</string>
+  <string name="voice_shortcut_add_item_long">Добавить пункт в список</string>
+  <string name="voice_shortcut_capture_task_short">Задача</string>
+  <string name="voice_shortcut_capture_task_long">Записать задачу</string>
+  <string name="voice_shortcut_today_short">Сегодня</string>
+  <string name="voice_shortcut_today_long">Показать сегодня</string>
+</resources>

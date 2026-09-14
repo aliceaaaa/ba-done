@@ -1,6 +1,11 @@
 export const VOICE_ENTRY_PAYLOAD_VERSION = 1;
 
-export const VOICE_ENTRY_SOURCES = ['iosAppIntent', 'androidAppAction', 'deepLink', 'shortcut'] as const;
+export const VOICE_ENTRY_SOURCES = [
+  'iosAppIntent',
+  'androidAppAction',
+  'deepLink',
+  'shortcut',
+] as const;
 export type VoiceEntrySource = (typeof VOICE_ENTRY_SOURCES)[number];
 
 export const VOICE_ENTRY_ACTIONS = [

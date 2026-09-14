@@ -1,0 +1,56 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "Add an item to ${applicationName}": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Добавь пункт в ${applicationName}"
+          }
+        }
+      }
+    },
+    "Capture a task in ${applicationName}": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Запиши задачу в ${applicationName}"
+          }
+        }
+      }
+    },
+    "Create an event in ${applicationName}": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Создай событие в ${applicationName}"
+          }
+        }
+      }
+    },
+    "Show today in ${applicationName}": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Покажи сегодня в ${applicationName}"
+          }
+        }
+      }
+    },
+    "Start voice capture in ${applicationName}": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Начни голосовой ввод в ${applicationName}"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

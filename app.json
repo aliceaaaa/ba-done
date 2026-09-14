@@ -42,7 +42,8 @@
           "speechRecognitionPermission": "Allow $(PRODUCT_NAME) to convert your voice commands to text with the speech recognition service of your device. Apple may process the speech on its servers.",
           "androidSpeechServicePackages": ["com.google.android.googlequicksearchbox"]
         }
-      ]
+      ],
+      "./plugins/with-system-voice-entry"
     ],
     "scheme": "planner",
     "experiments": {

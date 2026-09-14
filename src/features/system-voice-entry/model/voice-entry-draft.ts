@@ -176,8 +176,7 @@ export function buildDraftFromVoiceEntry(
 
     case 'createCalendarEvent': {
       const date = intent.date ?? parsed.date;
-      const startTime =
-        intent.time ?? parsed.eventStart?.slice(11) ?? parsed.exactTime ?? null;
+      const startTime = intent.time ?? parsed.eventStart?.slice(11) ?? parsed.exactTime ?? null;
       const eventStart = date === null || startTime === null ? null : `${date}T${startTime}`;
       const ambiguities = withoutAmbiguities(parsed.ambiguities, [
         'taskOrEvent',

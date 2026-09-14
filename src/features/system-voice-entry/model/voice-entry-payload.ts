@@ -40,7 +40,8 @@ export type VoiceEntryParseContext = {
 const INTENT_ID_PATTERN = /^[A-Za-z0-9-]{8,64}$/;
 const LOCALE_PATTERN = /^[A-Za-z]{2,3}(?:[-_][A-Za-z0-9]{2,8})*$/;
 const INTEGER_PATTERN = /^\d{1,5}$/;
-const ISO_INSTANT_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/;
+const ISO_INSTANT_PATTERN =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/;
 
 type Field<T> = Result<T | null, VoiceEntryRejection>;
 
@@ -145,7 +146,11 @@ export function parseVoiceEntryPayload(
   }
   const trusted = TRUSTED_VOICE_ENTRY_SOURCES.includes(source);
 
-  const intentId = patternField(raw.intentId, (id) => INTENT_ID_PATTERN.test(id), 'invalidIntentId');
+  const intentId = patternField(
+    raw.intentId,
+    (id) => INTENT_ID_PATTERN.test(id),
+    'invalidIntentId',
+  );
   const createdAt = patternField(
     raw.createdAt,
     (instant) => ISO_INSTANT_PATTERN.test(instant) && !Number.isNaN(Date.parse(instant)),
@@ -167,7 +172,8 @@ export function parseVoiceEntryPayload(
     integerField(raw.priority, 1, 10, 'invalidPriority'),
     patternField(
       raw.locale,
-      (locale) => locale.length <= VOICE_ENTRY_LIMITS.maxLocaleLength && LOCALE_PATTERN.test(locale),
+      (locale) =>
+        locale.length <= VOICE_ENTRY_LIMITS.maxLocaleLength && LOCALE_PATTERN.test(locale),
       'invalidLocale',
     ),
   ] as const;

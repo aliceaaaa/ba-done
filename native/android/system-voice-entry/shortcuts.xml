@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+  <shortcut
+    android:shortcutId="voice_capture"
+    android:enabled="true"
+    android:icon="@mipmap/ic_launcher"
+    android:shortcutShortLabel="@string/voice_shortcut_capture_short"
+    android:shortcutLongLabel="@string/voice_shortcut_capture_long">
+    <intent
+      android:action="android.intent.action.VIEW"
+      android:targetPackage="__PACKAGE__"
+      android:targetClass="__PACKAGE__.MainActivity"
+      android:data="__SCHEME__://voice-entry?v=1&amp;action=openVoiceCapture&amp;entry=shortcut" />
+  </shortcut>
+  <shortcut
+    android:shortcutId="add_item"
+    android:enabled="true"
+    android:icon="@mipmap/ic_launcher"
+    android:shortcutShortLabel="@string/voice_shortcut_add_item_short"
+    android:shortcutLongLabel="@string/voice_shortcut_add_item_long">
+    <intent
+      android:action="android.intent.action.VIEW"
+      android:targetPackage="__PACKAGE__"
+      android:targetClass="__PACKAGE__.MainActivity"
+      android:data="__SCHEME__://voice-entry?v=1&amp;action=addListItem&amp;entry=shortcut" />
+  </shortcut>
+  <shortcut
+    android:shortcutId="capture_task"
+    android:enabled="true"
+    android:icon="@mipmap/ic_launcher"
+    android:shortcutShortLabel="@string/voice_shortcut_capture_task_short"
+    android:shortcutLongLabel="@string/voice_shortcut_capture_task_long">
+    <intent
+      android:action="android.intent.action.VIEW"
+      android:targetPackage="__PACKAGE__"
+      android:targetClass="__PACKAGE__.MainActivity"
+      android:data="__SCHEME__://voice-entry?v=1&amp;action=captureFutureTask&amp;entry=shortcut" />
+  </shortcut>
+  <shortcut
+    android:shortcutId="open_today"
+    android:enabled="true"
+    android:icon="@mipmap/ic_launcher"
+    android:shortcutShortLabel="@string/voice_shortcut_today_short"
+    android:shortcutLongLabel="@string/voice_shortcut_today_long">
+    <intent
+      android:action="android.intent.action.VIEW"
+      android:targetPackage="__PACKAGE__"
+      android:targetClass="__PACKAGE__.MainActivity"
+      android:data="__SCHEME__://voice-entry?v=1&amp;action=openToday&amp;entry=shortcut" />
+  </shortcut>
+</shortcuts>
