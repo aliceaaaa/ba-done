@@ -144,6 +144,62 @@ describe('migrateDatabase', () => {
     ).rejects.toThrow('CHECK constraint failed');
   });
 
+  it('adds lists to an existing database without touching tasks, events or settings', async () => {
+    await migrateDatabase(db, migrations.slice(0, 6));
+    await db.exec(`
+      INSERT INTO tasks
+        (id, title, status, scheduled_date, placement_type, priority, created_at, updated_at)
+      VALUES ('t1', 'Dentist', 'active', '2026-09-11', 'ranked', 5, 'now', 'now');
+      INSERT INTO calendar_events
+        (id, title, all_day, start_date, end_date, time_zone, created_at, updated_at)
+      VALUES ('e1', 'Holiday', 1, '2026-09-11', '2026-09-12', 'Europe/Berlin', 'now', 'now');
+      INSERT INTO app_settings (key, value) VALUES ('dayPeriodTime.morning', '08:30');
+    `);
+
+    await migrateDatabase(db);
+
+    expect(await userVersion(db)).toBe(migrations.length);
+    expect(await tableExists(db, 'lists')).toBe(true);
+    expect(await tableExists(db, 'list_items')).toBe(true);
+    expect(await db.all('SELECT id, priority FROM tasks')).toEqual([{ id: 't1', priority: 5 }]);
+    expect(await db.all('SELECT id FROM calendar_events')).toEqual([{ id: 'e1' }]);
+    expect(await db.all('SELECT key, value FROM app_settings')).toEqual([
+      { key: 'dayPeriodTime.morning', value: '08:30' },
+    ]);
+    expect(await db.all('SELECT id FROM lists')).toEqual([]);
+  });
+
+  it('enforces list and item invariants at the database level', async () => {
+    await migrateDatabase(db);
+    await db.exec(`
+      INSERT INTO lists (id, title, kind, color, icon, created_at, updated_at)
+      VALUES ('l1', 'Shopping', 'shopping', 'green', 'cart', 'now', 'now');
+      INSERT INTO list_items (id, list_id, title, position, created_at, updated_at)
+      VALUES ('i1', 'l1', 'Milk', 1, 'now', 'now');
+    `);
+    const insertItem = (values: string) =>
+      db.exec(`
+        INSERT INTO list_items
+          (id, list_id, title, quantity, checked, position, checked_at, created_at, updated_at)
+        VALUES (${values}, 'now', 'now');
+      `);
+
+    await expect(
+      db.exec(`INSERT INTO lists (id, title, kind, color, icon, created_at, updated_at)
+               VALUES ('l2', '  ', 'custom', 'blue', 'star', 'now', 'now')`),
+    ).rejects.toThrow('CHECK constraint failed');
+    await expect(insertItem(`'i2', 'l1', 'Bread', NULL, 0, 1, NULL`)).rejects.toThrow(
+      'UNIQUE constraint failed',
+    );
+    await expect(insertItem(`'i3', 'l1', 'Eggs', 0, 0, 2, NULL`)).rejects.toThrow(
+      'CHECK constraint failed',
+    );
+    await expect(insertItem(`'i4', 'l1', 'Tea', NULL, 1, 1, NULL`)).rejects.toThrow(
+      'CHECK constraint failed',
+    );
+    await expect(insertItem(`'i5', 'l1', 'Tea', NULL, 1, 1, 'now'`)).resolves.toBeUndefined();
+  });
+
   it('rolls back a failing migration', async () => {
     const failing: Migration = async (tx) => {
       await tx.exec('CREATE TABLE broken (id INTEGER)');

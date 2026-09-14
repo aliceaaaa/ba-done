@@ -34,6 +34,14 @@
           "defaultChannel": "reminders",
           "enableBackgroundRemoteNotifications": false
         }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Allow $(PRODUCT_NAME) to use the microphone so you can add tasks, events and list items by voice. Audio is not recorded or stored.",
+          "speechRecognitionPermission": "Allow $(PRODUCT_NAME) to convert your voice commands to text with the speech recognition service of your device. Apple may process the speech on its servers.",
+          "androidSpeechServicePackages": ["com.google.android.googlequicksearchbox"]
+        }
       ]
     ],
     "scheme": "planner",

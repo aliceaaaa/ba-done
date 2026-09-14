@@ -344,6 +344,46 @@ const addCalendarEvents: Migration = async (db) => {
   `);
 };
 
+const addLists: Migration = async (db) => {
+  await db.exec(`
+    CREATE TABLE lists (
+      id TEXT PRIMARY KEY NOT NULL,
+      title TEXT NOT NULL CHECK (length(trim(title)) > 0),
+      kind TEXT NOT NULL CHECK (kind IN ('shopping', 'custom')),
+      color TEXT NOT NULL CHECK (length(color) > 0),
+      icon TEXT NOT NULL CHECK (length(icon) > 0),
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      archived_at TEXT,
+      deleted_at TEXT
+    );
+
+    CREATE INDEX lists_visible_idx ON lists (deleted_at, archived_at, kind, created_at);
+
+    CREATE TABLE list_items (
+      id TEXT PRIMARY KEY NOT NULL,
+      list_id TEXT NOT NULL REFERENCES lists (id) ON DELETE CASCADE,
+      title TEXT NOT NULL CHECK (length(trim(title)) > 0),
+      quantity REAL CHECK (quantity IS NULL OR quantity > 0),
+      unit TEXT,
+      note TEXT,
+      checked INTEGER NOT NULL DEFAULT 0 CHECK (checked IN (0, 1)),
+      position INTEGER NOT NULL CHECK (typeof(position) = 'integer' AND position >= 1),
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      checked_at TEXT,
+      deleted_at TEXT,
+      CHECK ((checked = 1) = (checked_at IS NOT NULL))
+    );
+
+    CREATE UNIQUE INDEX list_items_active_position_unique
+      ON list_items (list_id, position)
+      WHERE checked = 0 AND deleted_at IS NULL;
+
+    CREATE INDEX list_items_list_idx ON list_items (list_id, deleted_at, checked, position);
+  `);
+};
+
 export const migrations: readonly Migration[] = [
   createTasksSchema,
   addCompletionEvents,
@@ -351,6 +391,7 @@ export const migrations: readonly Migration[] = [
   addCarryOverReturnNotices,
   addReminderScheduling,
   addCalendarEvents,
+  addLists,
 ];
 
 export async function migrateDatabase(

@@ -29,6 +29,7 @@ import {
   type CalendarEventService,
   type EventResult,
 } from '@/entities/calendar-event';
+import { createListService, type ListResult, type ListService } from '@/entities/list';
 import { createAppSettingsRepository } from '@/entities/reminder';
 import {
   createTaskService,
@@ -113,6 +114,17 @@ export function createTestEventService(
   });
 }
 
+export function createTestListService(
+  db: SqlDatabase,
+  options: TestServiceOptions = {},
+): ListService {
+  return createListService({
+    db,
+    now: options.now ?? createTestClock(options.start),
+    generateId: createIdGenerator(options.idPrefix ?? 'list'),
+  });
+}
+
 export type TestReminders = {
   raw: TaskService;
   service: TaskService;
@@ -180,7 +192,7 @@ export function createTestReminders(
   };
 }
 
-export function unwrap<T>(result: TaskResult<T> | EventResult<T>): T {
+export function unwrap<T>(result: TaskResult<T> | EventResult<T> | ListResult<T>): T {
   if (!result.ok) {
     throw new Error(`Expected success, got ${result.error.type}: ${result.error.message}`);
   }
