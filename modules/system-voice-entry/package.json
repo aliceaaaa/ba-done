@@ -1,0 +1,6 @@
+{
+  "name": "system-voice-entry",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Bridges payloads queued by App Intents to React Native. No parsing and no audio."
+}

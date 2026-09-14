@@ -75,6 +75,12 @@ function failure(
   return { ok: false, reason, message, fields, conflict };
 }
 
+const NOT_FOUND_ERRORS = ['ListItemNotFound', 'ListNotFound', 'TaskNotFound', 'EventNotFound'];
+
+function alreadyGone(result: { ok: true } | { ok: false; error: { type: string } }): boolean {
+  return result.ok || NOT_FOUND_ERRORS.includes(result.error.type);
+}
+
 function toReminderInput(
   reminder: Extract<VoiceSaveInput, { kind: 'rankedTask' }>['reminder'],
 ): ReminderInput | null {
@@ -257,13 +263,13 @@ export function createVoiceCommandExecutor({
       try {
         switch (undo.kind) {
           case 'listItem':
-            return (await lists.deleteItem(undo.id)).ok;
+            return alreadyGone(await lists.deleteItem(undo.id));
           case 'list':
-            return (await lists.deleteList(undo.id)).ok;
+            return alreadyGone(await lists.deleteList(undo.id));
           case 'task':
-            return (await tasks.deleteTask(undo.id)).ok;
+            return alreadyGone(await tasks.deleteTask(undo.id));
           case 'calendarEvent':
-            return (await events.deleteEvent(undo.id)).ok;
+            return alreadyGone(await events.deleteEvent(undo.id));
         }
       } catch {
         return false;

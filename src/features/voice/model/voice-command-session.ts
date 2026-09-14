@@ -19,6 +19,7 @@ export type PendingVoiceCommand = {
   draft: VoiceCommandDraft;
   hint: VoiceCommandHint;
   error: string | null;
+  intro?: string;
 };
 
 export type VoiceNotice = {
@@ -26,6 +27,7 @@ export type VoiceNotice = {
   message: string;
   undo: VoiceUndo | null;
   destination: VoiceDestination | null;
+  undoHandler?: () => Promise<boolean>;
 };
 
 export type VoiceCommandSessionState = {
@@ -45,6 +47,7 @@ export type VoiceCommandSession = {
     mode: VoiceInputMode;
     hint: VoiceCommandHint;
   }): Promise<TranscriptOutcome>;
+  openPreview(pending: PendingVoiceCommand): void;
   closePreview(): void;
   showNotice(notice: Omit<VoiceNotice, 'id'>): void;
   dismissNotice(): void;
@@ -138,6 +141,10 @@ export function createVoiceCommandSession({
       return 'preview';
     },
 
+    openPreview(pending) {
+      setState({ pending });
+    },
+
     closePreview() {
       setState({ pending: null });
     },
@@ -153,7 +160,9 @@ export function createVoiceCommandSession({
       if (notice === null || notice.undo === null) {
         return false;
       }
-      const undone = await executor.undo(notice.undo);
+      const { undo, undoHandler } = notice;
+      setState({ notice: { ...notice, undo: null } });
+      const undone = await (undoHandler === undefined ? executor.undo(undo) : undoHandler());
       if (undone) {
         setState({ notice: null });
       } else {

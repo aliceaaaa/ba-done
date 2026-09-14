@@ -252,12 +252,24 @@ function PreviewForm({ pending, onClose }: PreviewFormProps) {
       keyboardShouldPersistTaps="handled"
       testID="voice-command-preview"
     >
-      <View style={styles.transcript}>
-        <Text style={styles.label}>{PREVIEW_TEXT.youSaid}</Text>
-        <Text style={styles.transcriptText} testID="voice-transcript">
-          {draft.transcript}
+      {pending.intro === undefined ? null : (
+        <Text
+          accessibilityRole="header"
+          accessibilityLiveRegion="polite"
+          style={styles.intro}
+          testID="voice-preview-intro"
+        >
+          {pending.intro}
         </Text>
-      </View>
+      )}
+      {draft.transcript.length === 0 ? null : (
+        <View style={styles.transcript}>
+          <Text style={styles.label}>{PREVIEW_TEXT.youSaid}</Text>
+          <Text style={styles.transcriptText} testID="voice-transcript">
+            {draft.transcript}
+          </Text>
+        </View>
+      )}
 
       <View style={styles.field}>
         <Text style={[styles.label, isMissing('kind') && styles.missingLabel]}>
@@ -570,6 +582,11 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     gap: spacing.lg,
     paddingBottom: 96,
+  },
+  intro: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.text,
   },
   transcript: {
     gap: spacing.xs,

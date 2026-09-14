@@ -384,6 +384,37 @@ const addLists: Migration = async (db) => {
   `);
 };
 
+const addVoiceEntryIntents: Migration = async (db) => {
+  await db.exec(`
+    CREATE TABLE voice_entry_intents (
+      intent_id TEXT PRIMARY KEY NOT NULL CHECK (length(intent_id) BETWEEN 8 AND 64),
+      source TEXT NOT NULL CHECK (
+        source IN ('iosAppIntent', 'androidAppAction', 'deepLink', 'shortcut')
+      ),
+      action TEXT NOT NULL CHECK (
+        action IN (
+          'addListItem', 'captureFutureTask', 'createRankedTask',
+          'createCalendarEvent', 'openToday', 'openVoiceCapture'
+        )
+      ),
+      status TEXT NOT NULL CHECK (
+        status IN ('processing', 'saved', 'needsInput', 'navigated', 'failed')
+      ),
+      entity_kind TEXT CHECK (
+        entity_kind IS NULL OR entity_kind IN ('listItem', 'list', 'task', 'calendarEvent')
+      ),
+      entity_id TEXT,
+      received_at TEXT NOT NULL,
+      finished_at TEXT,
+      undone_at TEXT,
+      CHECK ((entity_kind IS NULL) = (entity_id IS NULL)),
+      CHECK (undone_at IS NULL OR (status = 'saved' AND entity_id IS NOT NULL))
+    );
+
+    CREATE INDEX voice_entry_intents_received_idx ON voice_entry_intents (received_at);
+  `);
+};
+
 export const migrations: readonly Migration[] = [
   createTasksSchema,
   addCompletionEvents,
@@ -392,6 +423,7 @@ export const migrations: readonly Migration[] = [
   addReminderScheduling,
   addCalendarEvents,
   addLists,
+  addVoiceEntryIntents,
 ];
 
 export async function migrateDatabase(

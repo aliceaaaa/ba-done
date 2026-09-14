@@ -320,7 +320,7 @@ function hintDate(context: VoiceParseContext): string | null {
     : null;
 }
 
-function missingFieldsFor(
+export function computeMissingFields(
   draft: Omit<VoiceCommandDraft, 'missingFields' | 'confidence'>,
 ): VoiceField[] {
   const missing: VoiceField[] = [];
@@ -554,7 +554,7 @@ export function parseVoiceCommand(
     unit: kind === 'listItem' ? signals.unit : null,
     ambiguities: signals.ambiguities,
   };
-  const missingFields = missingFieldsFor(base);
+  const missingFields = computeMissingFields(base);
   return {
     status: 'parsed',
     hadWakePhrase,

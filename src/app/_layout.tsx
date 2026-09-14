@@ -3,7 +3,7 @@ import { Stack } from 'expo-router';
 import { SQLiteProvider, useSQLiteContext, type SQLiteDatabase } from 'expo-sqlite';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, type ReactNode } from 'react';
-import { StyleSheet } from 'react-native';
+import { Linking, StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { createExpoSqliteDatabase } from '@/database/expo-sqlite-database';
@@ -25,6 +25,12 @@ import {
   createSyncedTaskService,
 } from '@/features/reminders';
 import { createExpoNotificationAdapter } from '@/features/reminders/api/expo-notification-adapter';
+import {
+  SystemVoiceEntryHost,
+  SystemVoiceEntryProvider,
+  createSystemVoiceEntryServices,
+} from '@/features/system-voice-entry';
+import { createNativeVoiceEntryBridge } from '@/features/system-voice-entry/api/native-voice-entry-bridge';
 import {
   VoiceHost,
   VoiceProvider,
@@ -89,7 +95,18 @@ function AppServicesRoot({ children }: { children: ReactNode }) {
       deviceLocale: getDeviceLocale,
       openSettings: openAppSettings,
     });
-    return { adapter, coordinator, service, events, handler, lists, voice };
+    const systemVoiceEntry = createSystemVoiceEntryServices({
+      db,
+      voice,
+      lists,
+      bridge: createNativeVoiceEntryBridge(),
+      now,
+      timeZone: getDeviceTimeZone,
+      generateId: randomUUID,
+      openVoiceSettings: openAppSettings,
+      openShortcutsApp: () => Linking.openURL('shortcuts://'),
+    });
+    return { adapter, coordinator, service, events, handler, lists, voice, systemVoiceEntry };
   }, [sqlite]);
 
   useEffect(() => () => services.voice.dispose(), [services]);
@@ -99,16 +116,19 @@ function AppServicesRoot({ children }: { children: ReactNode }) {
       <CalendarEventServiceProvider service={services.events}>
         <ListServiceProvider service={services.lists}>
           <VoiceProvider services={services.voice}>
-            <ReminderProvider coordinator={services.coordinator}>
-              {children}
-              <ReminderLifecycle
-                adapter={services.adapter}
-                coordinator={services.coordinator}
-                handler={services.handler}
-              />
-              <ReminderNoticeHost coordinator={services.coordinator} />
-              <VoiceHost />
-            </ReminderProvider>
+            <SystemVoiceEntryProvider services={services.systemVoiceEntry}>
+              <ReminderProvider coordinator={services.coordinator}>
+                {children}
+                <ReminderLifecycle
+                  adapter={services.adapter}
+                  coordinator={services.coordinator}
+                  handler={services.handler}
+                />
+                <ReminderNoticeHost coordinator={services.coordinator} />
+                <VoiceHost />
+                <SystemVoiceEntryHost />
+              </ReminderProvider>
+            </SystemVoiceEntryProvider>
           </VoiceProvider>
         </ListServiceProvider>
       </CalendarEventServiceProvider>

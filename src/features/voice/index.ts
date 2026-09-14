@@ -1,8 +1,14 @@
 export * from './model/voice-command';
 export * from './model/speech-recognition-adapter';
-export { parseVoiceCommand, stripWakePhrase } from './model/voice-command-parser';
+export {
+  computeMissingFields,
+  parseVoiceCommand,
+  stripWakePhrase,
+} from './model/voice-command-parser';
 export { matchListTarget } from './model/list-target-matcher';
 export { canExecuteImmediately } from './model/voice-command-policy';
+export { saveInputFromDraft } from './model/voice-save-input';
+export type { VoiceSaveInput } from './model/voice-save-input';
 export {
   createVoiceCommandExecutor,
   VOICE_EXECUTION_MESSAGES,
@@ -14,7 +20,11 @@ export type {
   VoiceUndo,
 } from './model/voice-command-executor';
 export { createVoiceCommandSession } from './model/voice-command-session';
-export type { VoiceCommandSession } from './model/voice-command-session';
+export type {
+  PendingVoiceCommand,
+  VoiceCommandSession,
+  VoiceNotice,
+} from './model/voice-command-session';
 export { createVoiceInputController } from './model/voice-input-controller';
 export type {
   AppStateSource,
@@ -31,6 +41,6 @@ export type { RecognitionLanguage, VoiceSettings } from './model/voice-settings'
 export { VoiceProvider, useOptionalVoice, useVoice, useVoiceHint } from './model/voice-context';
 export { createVoiceSettingsRepository } from './api/voice-settings-repository';
 export { MicButton, MIC_LABELS } from './ui/mic-button';
-export { VoiceHost, VOICE_HOST_TEXT } from './ui/voice-host';
+export { VoiceHost, VOICE_HOST_TEXT, destinationHref } from './ui/voice-host';
 export { VoiceCommandPreviewScreen, PREVIEW_TEXT } from './ui/voice-command-preview-screen';
 export { VoiceSettingsSection, VOICE_SETTINGS_TEXT } from './ui/voice-settings-section';
