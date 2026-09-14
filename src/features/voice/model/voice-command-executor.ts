@@ -59,6 +59,8 @@ export type VoiceCommandExecutorDeps = {
   lists: ListService;
 };
 
+const MAX_REMEMBERED_COMMANDS = 20;
+
 export const VOICE_EXECUTION_MESSAGES = {
   storage: 'Could not save. Nothing was changed.',
   chooseList: 'Choose a list',
@@ -245,6 +247,9 @@ export function createVoiceCommandExecutor({
           return result;
         });
       executions.set(commandId, pending);
+      for (const key of [...executions.keys()].slice(0, -MAX_REMEMBERED_COMMANDS)) {
+        executions.delete(key);
+      }
       return pending;
     },
 
