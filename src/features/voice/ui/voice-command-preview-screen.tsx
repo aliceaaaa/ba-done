@@ -118,7 +118,9 @@ function PreviewForm({ pending, onClose }: PreviewFormProps) {
   const router = useRouter();
   const today = useMemo(() => tasks.getToday(), [tasks]);
   const { draft } = pending;
-  const [values, setValues] = useState<VoicePreviewValues>(() => previewValuesFromDraft(draft, today));
+  const [values, setValues] = useState<VoicePreviewValues>(() =>
+    previewValuesFromDraft(draft, today),
+  );
   const [lists, setLists] = useState<ListSummary[]>([]);
   const [slots, setSlots] = useState<PrioritySlot[] | null>(null);
   const [slotsVersion, setSlotsVersion] = useState(0);
@@ -179,7 +181,12 @@ function PreviewForm({ pending, onClose }: PreviewFormProps) {
 
   function changeKind(kind: PreviewKind) {
     setErrors({});
-    if (kind === 'calendarEvent' && !values.startSet && draft.date !== null && draft.exactTime !== null) {
+    if (
+      kind === 'calendarEvent' &&
+      !values.startSet &&
+      draft.date !== null &&
+      draft.exactTime !== null
+    ) {
       const start = `${draft.date}T${draft.exactTime}`;
       const end = addMinutesToLocalDateTime(start, VOICE_CONFIG.suggestedEventMinutes);
       update({
@@ -253,7 +260,9 @@ function PreviewForm({ pending, onClose }: PreviewFormProps) {
       </View>
 
       <View style={styles.field}>
-        <Text style={[styles.label, isMissing('kind') && styles.missingLabel]}>{PREVIEW_TEXT.type}</Text>
+        <Text style={[styles.label, isMissing('kind') && styles.missingLabel]}>
+          {PREVIEW_TEXT.type}
+        </Text>
         <ChipRow
           accessibilityLabel={PREVIEW_TEXT.type}
           options={KIND_OPTIONS}
@@ -293,7 +302,11 @@ function PreviewForm({ pending, onClose }: PreviewFormProps) {
         <>
           <View style={[styles.field, isMissing('targetList') && styles.missingField]}>
             <Text style={styles.label}>{PREVIEW_TEXT.list}</Text>
-            <View accessibilityRole="radiogroup" accessibilityLabel={PREVIEW_TEXT.list} style={styles.chips}>
+            <View
+              accessibilityRole="radiogroup"
+              accessibilityLabel={PREVIEW_TEXT.list}
+              style={styles.chips}
+            >
               {orderedLists.map((list) => {
                 const selected =
                   values.listChoice?.type === 'existing' && values.listChoice.listId === list.id;
@@ -306,7 +319,9 @@ function PreviewForm({ pending, onClose }: PreviewFormProps) {
                     onPress={() => update({ listChoice: { type: 'existing', listId: list.id } })}
                     style={[styles.chip, selected && styles.chipSelected]}
                   >
-                    <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{list.title}</Text>
+                    <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
+                      {list.title}
+                    </Text>
                   </Pressable>
                 );
               })}
@@ -315,11 +330,21 @@ function PreviewForm({ pending, onClose }: PreviewFormProps) {
                 accessibilityState={{ selected: values.listChoice?.type === 'new' }}
                 accessibilityLabel={PREVIEW_TEXT.createList}
                 onPress={() =>
-                  update({ listChoice: { type: 'new', title: spokenListName ?? draft.targetListName ?? '' } })
+                  update({
+                    listChoice: {
+                      type: 'new',
+                      title: spokenListName ?? draft.targetListName ?? '',
+                    },
+                  })
                 }
                 style={[styles.chip, values.listChoice?.type === 'new' && styles.chipSelected]}
               >
-                <Text style={[styles.chipText, values.listChoice?.type === 'new' && styles.chipTextSelected]}>
+                <Text
+                  style={[
+                    styles.chipText,
+                    values.listChoice?.type === 'new' && styles.chipTextSelected,
+                  ]}
+                >
                   + {PREVIEW_TEXT.createList}
                 </Text>
               </Pressable>
@@ -356,7 +381,12 @@ function PreviewForm({ pending, onClose }: PreviewFormProps) {
 
       {values.kind === 'rankedTask' ? (
         <>
-          <View style={[styles.field, (isMissing('date') || errors.date !== undefined) && styles.missingField]}>
+          <View
+            style={[
+              styles.field,
+              (isMissing('date') || errors.date !== undefined) && styles.missingField,
+            ]}
+          >
             {values.dateSet ? (
               <DateField
                 label={PREVIEW_TEXT.date}
@@ -365,7 +395,10 @@ function PreviewForm({ pending, onClose }: PreviewFormProps) {
                 onChange={(date) => update({ date, priority: null })}
               />
             ) : (
-              <TextButton label={PREVIEW_TEXT.chooseDate} onPress={() => update({ dateSet: true })} />
+              <TextButton
+                label={PREVIEW_TEXT.chooseDate}
+                onPress={() => update({ dateSet: true })}
+              />
             )}
             <FieldMessage message={errors.date ?? errors.scheduledDate} />
           </View>
@@ -394,12 +427,20 @@ function PreviewForm({ pending, onClose }: PreviewFormProps) {
               ? formatLocalTime(values.exactTime)
               : DAY_PERIOD_LABELS[values.dayPeriod ?? 'morning']}
           </Text>
-          <TextButton label={PREVIEW_TEXT.clearTime} onPress={() => update({ exactTime: null, dayPeriod: null })} />
+          <TextButton
+            label={PREVIEW_TEXT.clearTime}
+            onPress={() => update({ exactTime: null, dayPeriod: null })}
+          />
         </View>
       ) : null}
 
       {values.kind === 'calendarEvent' ? (
-        <View style={[styles.field, (isMissing('eventStart') || errors.eventStart !== undefined) && styles.missingField]}>
+        <View
+          style={[
+            styles.field,
+            (isMissing('eventStart') || errors.eventStart !== undefined) && styles.missingField,
+          ]}
+        >
           {values.startSet ? (
             <>
               <View style={styles.switchRow}>
@@ -446,7 +487,10 @@ function PreviewForm({ pending, onClose }: PreviewFormProps) {
               <FieldMessage message={errors.end} />
             </>
           ) : (
-            <TextButton label={PREVIEW_TEXT.chooseStart} onPress={() => update({ startSet: true })} />
+            <TextButton
+              label={PREVIEW_TEXT.chooseStart}
+              onPress={() => update({ startSet: true })}
+            />
           )}
           <FieldMessage message={errors.eventStart} />
         </View>
@@ -458,7 +502,10 @@ function PreviewForm({ pending, onClose }: PreviewFormProps) {
             {PREVIEW_TEXT.reminder}:{' '}
             {formatReminder({ ...values.reminder, timeZone: tasks.getTimeZone() })}
           </Text>
-          <TextButton label={PREVIEW_TEXT.removeReminder} onPress={() => update({ reminder: null })} />
+          <TextButton
+            label={PREVIEW_TEXT.removeReminder}
+            onPress={() => update({ reminder: null })}
+          />
           <FieldMessage message={errors.reminder} />
         </View>
       ) : null}

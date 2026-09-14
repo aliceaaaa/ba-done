@@ -49,7 +49,8 @@ describe('HandsFreeController', () => {
       appState,
       scheduler,
       config: CONFIG,
-      hasWakePhrase: (transcript) => stripWakePhrase(transcript, VOICE_CONFIG.wakePhrases).hadWakePhrase,
+      hasWakePhrase: (transcript) =>
+        stripWakePhrase(transcript, VOICE_CONFIG.wakePhrases).hadWakePhrase,
       onCommand: (result) => commands.push(result),
     });
   });
@@ -81,7 +82,10 @@ describe('HandsFreeController', () => {
     adapter.emitFinal('add milk to Shopping');
 
     expect(commands).toEqual([]);
-    expect(handsFree.getState()).toMatchObject({ status: 'retrying', retryInMs: CONFIG.restartDelayMs });
+    expect(handsFree.getState()).toMatchObject({
+      status: 'retrying',
+      retryInMs: CONFIG.restartDelayMs,
+    });
     await scheduler.runNext();
     expect(handsFree.getState().status).toBe('waitingForWakePhrase');
     expect(adapter.calls.start).toHaveLength(2);
@@ -93,7 +97,9 @@ describe('HandsFreeController', () => {
 
     adapter.emitFinal('Hey app, add milk to Shopping');
 
-    expect(commands.map((command) => command.transcript)).toEqual(['Hey app, add milk to Shopping']);
+    expect(commands.map((command) => command.transcript)).toEqual([
+      'Hey app, add milk to Shopping',
+    ]);
     expect(handsFree.getState().status).toBe('handlingCommand');
     expect(adapter.calls.start).toHaveLength(1);
 
@@ -183,7 +189,10 @@ describe('HandsFreeController', () => {
 
     adapter.emitError('permissionDenied');
 
-    expect(handsFree.getState()).toMatchObject({ status: 'paused', pauseReason: 'permissionDenied' });
+    expect(handsFree.getState()).toMatchObject({
+      status: 'paused',
+      pauseReason: 'permissionDenied',
+    });
 
     await handsFree.start();
     expect(handsFree.getState().pauseReason).toBe('permissionDenied');

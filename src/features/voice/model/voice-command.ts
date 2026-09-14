@@ -12,18 +12,10 @@ export type VoiceCommandKind = (typeof VOICE_COMMAND_KINDS)[number];
 export type VoiceLanguage = 'en' | 'ru';
 
 export type VoiceField =
-  | 'kind'
-  | 'title'
-  | 'targetList'
-  | 'date'
-  | 'priority'
-  | 'eventStart'
-  | 'eventEnd'
-  | 'reminder';
+  'kind' | 'title' | 'targetList' | 'date' | 'priority' | 'eventStart' | 'eventEnd' | 'reminder';
 
 export type VoiceReminderDraft =
-  | { type: 'exact'; localDateTime: string }
-  | { type: 'dayPeriod'; period: DayPeriod };
+  { type: 'exact'; localDateTime: string } | { type: 'dayPeriod'; period: DayPeriod };
 
 export type VoiceAmbiguity =
   | { type: 'taskOrEvent' }

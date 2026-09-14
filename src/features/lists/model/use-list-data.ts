@@ -1,14 +1,10 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import {
-  useListService,
-  type List,
-  type ListItems,
-  type ListSummary,
-} from '@/entities/list';
+import { useListService, type List, type ListItems, type ListSummary } from '@/entities/list';
 
-export type Loadable<T> = { status: 'loading' } | { status: 'error' } | { status: 'ready'; value: T };
+export type Loadable<T> =
+  { status: 'loading' } | { status: 'error' } | { status: 'ready'; value: T };
 
 function useLoadable<T>(load: () => Promise<T>, subscribe: (listener: () => void) => () => void) {
   const [state, setState] = useState<Loadable<T>>({ status: 'loading' });

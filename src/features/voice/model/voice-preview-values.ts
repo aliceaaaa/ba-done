@@ -8,7 +8,8 @@ import type { VoiceSaveInput } from './voice-save-input';
 
 export type PreviewKind = 'listItem' | 'futureTask' | 'rankedTask' | 'calendarEvent';
 
-export type ListChoice = { type: 'existing'; listId: string } | { type: 'new'; title: string } | null;
+export type ListChoice =
+  { type: 'existing'; listId: string } | { type: 'new'; title: string } | null;
 
 export type VoicePreviewValues = {
   kind: PreviewKind | null;
@@ -45,7 +46,10 @@ function split(localDateTime: string | null, fallbackDate: string, fallbackTime:
   return { date, time };
 }
 
-export function previewValuesFromDraft(draft: VoiceCommandDraft, today: string): VoicePreviewValues {
+export function previewValuesFromDraft(
+  draft: VoiceCommandDraft,
+  today: string,
+): VoicePreviewValues {
   const date = draft.date ?? today;
   const start = split(draft.eventStart, date, '09:00');
   const end = split(
@@ -79,7 +83,11 @@ export function previewValuesFromDraft(draft: VoiceCommandDraft, today: string):
 
 export type PreviewInputResult =
   | { ok: true; input: VoiceSaveInput }
-  | { ok: false; field: 'kind' | 'targetList' | 'quantity' | 'date' | 'eventStart'; message: string };
+  | {
+      ok: false;
+      field: 'kind' | 'targetList' | 'quantity' | 'date' | 'eventStart';
+      message: string;
+    };
 
 export const PREVIEW_MESSAGES = {
   chooseType: 'Choose what to create',

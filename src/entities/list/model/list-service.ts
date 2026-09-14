@@ -123,7 +123,10 @@ export function createListService({ db, now, generateId }: ListServiceDeps): Lis
     }
   }
 
-  async function insertList(repos: Repositories, input: CreateListInput): Promise<ListResult<List>> {
+  async function insertList(
+    repos: Repositories,
+    input: CreateListInput,
+  ): Promise<ListResult<List>> {
     const validated = validateListFields({
       title: input.title,
       kind: input.kind ?? 'custom',
@@ -332,7 +335,9 @@ export function createListService({ db, now, generateId }: ListServiceDeps): Lis
     },
 
     addItem(listId, input) {
-      return inTransaction((repos) => withList(repos, listId, (list) => insertItem(repos, list, input)));
+      return inTransaction((repos) =>
+        withList(repos, listId, (list) => insertItem(repos, list, input)),
+      );
     },
 
     updateItem(id, input) {

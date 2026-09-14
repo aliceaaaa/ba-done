@@ -10,6 +10,7 @@ import {
   type ScheduledTask,
   type TaskResult,
 } from '@/entities/task';
+import { MicButton, useVoiceHint } from '@/features/voice';
 import { UI_STRINGS } from '@/shared/config/ui-strings';
 import { DateSwitcher } from '@/shared/ui/date-switcher';
 import { TextButton } from '@/shared/ui/text-button';
@@ -42,6 +43,7 @@ export function TodayScreen({ initialDate = null }: TodayScreenProps) {
   const [sentBackIds, setSentBackIds] = useState<string[]>([]);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [cardsVersion, setCardsVersion] = useState(0);
+  useVoiceHint({ kind: 'rankedTask', date });
 
   const cards = useMemo(
     () => (deck === null ? null : withSentBackLast(deck, sentBackIds)),
@@ -138,6 +140,7 @@ export function TodayScreen({ initialDate = null }: TodayScreenProps) {
           {UI_STRINGS.todayList}
         </Text>
         <View style={styles.headerActions}>
+          <MicButton hint={{ kind: 'rankedTask', date }} />
           <TextButton label="Future" onPress={openFuturePool} />
           <TextButton label="New task" variant="primary" onPress={createTask} />
         </View>
@@ -170,6 +173,7 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: spacing.sm,
@@ -178,6 +182,7 @@ const styles = StyleSheet.create({
   },
   headerActions: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.sm,
   },
   title: {

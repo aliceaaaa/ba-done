@@ -107,7 +107,10 @@ export function ListScreen({ listId }: ListScreenProps) {
       return;
     }
     const previous = state.value;
-    setState({ status: 'ready', value: replaceItem(previous, { ...item, checked: !item.checked }) });
+    setState({
+      status: 'ready',
+      value: replaceItem(previous, { ...item, checked: !item.checked }),
+    });
     setError(null);
     try {
       const result = await service.setItemChecked(item.id, !item.checked);
@@ -180,13 +183,19 @@ export function ListScreen({ listId }: ListScreenProps) {
           <Text accessibilityRole="header" style={styles.title}>
             {list.title}
           </Text>
-          <TextButton label={LIST_TEXT.editList} onPress={() => router.push(`/list/${list.id}/edit`)} />
+          <TextButton
+            label={LIST_TEXT.editList}
+            onPress={() => router.push(`/list/${list.id}/edit`)}
+          />
         </View>
 
         {archived ? (
           <View style={styles.banner} accessibilityRole="alert">
             <Text style={styles.bannerText}>{LIST_TEXT.archived}</Text>
-            <TextButton label={LIST_TEXT.restore} onPress={() => void guarded(() => service.restoreList(list.id))} />
+            <TextButton
+              label={LIST_TEXT.restore}
+              onPress={() => void guarded(() => service.restoreList(list.id))}
+            />
           </View>
         ) : (
           <View style={styles.inputRow}>
@@ -229,7 +238,9 @@ export function ListScreen({ listId }: ListScreenProps) {
               onToggle={(target) => void toggle(target)}
               onEdit={(target) => router.push(`/list-item/${target.id}`)}
               onDelete={confirmDelete}
-              onMove={(target, direction) => void guarded(() => service.moveItem(target.id, direction))}
+              onMove={(target, direction) =>
+                void guarded(() => service.moveItem(target.id, direction))
+              }
             />
           ))}
         </View>
@@ -248,7 +259,9 @@ export function ListScreen({ listId }: ListScreenProps) {
                   {completedOpen ? '▾' : '▸'} {LIST_TEXT.completed} ({items.completed.length})
                 </Text>
               </Pressable>
-              {archived ? null : <TextButton label={LIST_TEXT.clearCompleted} onPress={confirmClear} />}
+              {archived ? null : (
+                <TextButton label={LIST_TEXT.clearCompleted} onPress={confirmClear} />
+              )}
             </View>
             {completedOpen ? (
               <View testID="completed-items">

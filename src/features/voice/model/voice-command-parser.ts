@@ -62,7 +62,9 @@ function wakePhrasePattern(phrase: string): RegExp {
     .split(/[\s,.!?]+/)
     .filter((word) => word.length > 0)
     .map(escapeRegExp);
-  return pattern(`^${WAKE_SEPARATOR}${words.join(WAKE_SEPARATOR)}(?![\\p{L}\\p{N}])${WAKE_SEPARATOR}`);
+  return pattern(
+    `^${WAKE_SEPARATOR}${words.join(WAKE_SEPARATOR)}(?![\\p{L}\\p{N}])${WAKE_SEPARATOR}`,
+  );
 }
 
 export function stripWakePhrase(
@@ -93,7 +95,9 @@ function extractPriority(signals: Signals) {
     pattern(
       `${WORD_START}(?:(?:with|and)\\s+)?(?:a\\s+)?priority(?:\\s+(?:of|is|number))?[\\s:]*(${NUMBER_PATTERN})${WORD_END}`,
     ),
-    pattern(`${WORD_START}(?:(?:с|и)\\s+)?приоритет(?:ом)?(?:\\s+номер)?[\\s:]*(${NUMBER_PATTERN})${WORD_END}`),
+    pattern(
+      `${WORD_START}(?:(?:с|и)\\s+)?приоритет(?:ом)?(?:\\s+номер)?[\\s:]*(${NUMBER_PATTERN})${WORD_END}`,
+    ),
   ];
   for (const regex of readers) {
     const found = extract(signals.text, regex, (match) => parseNumber(match[1] ?? ''));
@@ -158,7 +162,11 @@ const RU_UNITS =
   'бутыл(?:ка|ки|ок|ку)|пач(?:ка|ки|ек|ку)|бан(?:ка|ки|ок|ку)|короб(?:ка|ки|ок|ку)|пакет(?:а|ов)?|кг|килограмм(?:а|ов)?|кило|грамм(?:а|ов)?|г|литр(?:а|ов)?|л|штук(?:а|и|у)?|шт|упаков(?:ка|ки|ок|ку)|десят(?:ок|ка)|буханк(?:а|и|у)|батон(?:а|ов)?|пучо?к(?:а|ов)?';
 const UNITS = `${EN_UNITS}|${RU_UNITS}`;
 
-function extractQuantity(title: string): { title: string; quantity: number | null; unit: string | null } {
+function extractQuantity(title: string): {
+  title: string;
+  quantity: number | null;
+  unit: string | null;
+} {
   const leading = pattern(`^(${NUMBER_PATTERN}|an?)\\s+(${UNITS})(?:\\s+of)?\\s+(.+)$`).exec(title);
   if (leading !== null) {
     const raw = foldText(leading[1] ?? '');
@@ -186,8 +194,12 @@ function extractQuantity(title: string): { title: string; quantity: number | nul
 
 function extractExplicitList(signals: Signals) {
   const prefixed =
-    pattern(`^\\s*(?:во?|на)\\s+(?:мой\\s+)?список\\s+(.+?)\\s*[—–:-]\\s*(.+)$`).exec(signals.text) ??
-    pattern(`^\\s*(?:on|in|to)\\s+(?:my\\s+|the\\s+)?(.+?)\\s+list\\s*[—–:-]\\s*(.+)$`).exec(signals.text);
+    pattern(`^\\s*(?:во?|на)\\s+(?:мой\\s+)?список\\s+(.+?)\\s*[—–:-]\\s*(.+)$`).exec(
+      signals.text,
+    ) ??
+    pattern(`^\\s*(?:on|in|to)\\s+(?:my\\s+|the\\s+)?(.+?)\\s+list\\s*[—–:-]\\s*(.+)$`).exec(
+      signals.text,
+    );
   if (prefixed !== null) {
     signals.listTarget = { kind: 'name', name: prefixed[1] ?? '' };
     signals.text = prefixed[2] ?? '';
@@ -223,8 +235,10 @@ function extractExplicitList(signals: Signals) {
 
 function extractTailList(signals: Signals) {
   const found =
-    extract(signals.text, pattern(`${WORD_START}(?:to|onto)\\s+(?:my\\s+|the\\s+)?([^\\s].*?)\\s*[.!]?$`), (match) =>
-      cleanTitle(match[1] ?? ''),
+    extract(
+      signals.text,
+      pattern(`${WORD_START}(?:to|onto)\\s+(?:my\\s+|the\\s+)?([^\\s].*?)\\s*[.!]?$`),
+      (match) => cleanTitle(match[1] ?? ''),
     ) ??
     extract(signals.text, pattern(`${WORD_START}(?:во?)\\s+([^\\s].*?)\\s*[.!]?$`), (match) =>
       cleanTitle(match[1] ?? ''),
@@ -306,7 +320,9 @@ function hintDate(context: VoiceParseContext): string | null {
     : null;
 }
 
-function missingFieldsFor(draft: Omit<VoiceCommandDraft, 'missingFields' | 'confidence'>): VoiceField[] {
+function missingFieldsFor(
+  draft: Omit<VoiceCommandDraft, 'missingFields' | 'confidence'>,
+): VoiceField[] {
   const missing: VoiceField[] = [];
   if (draft.kind === 'unknown') {
     missing.push('kind');
@@ -371,7 +387,10 @@ function emptyDraft(transcript: string, language: VoiceLanguage): VoiceCommandDr
   };
 }
 
-export function parseVoiceCommand(transcript: string, context: VoiceParseContext): VoiceParseOutcome {
+export function parseVoiceCommand(
+  transcript: string,
+  context: VoiceParseContext,
+): VoiceParseOutcome {
   const original = collapseSpaces(transcript);
   const { text: withoutWake, hadWakePhrase } = stripWakePhrase(original, context.wakePhrases);
   if (context.mode === 'handsFree' && !hadWakePhrase) {
@@ -406,7 +425,9 @@ export function parseVoiceCommand(transcript: string, context: VoiceParseContext
 
   signals.reminderRequested = takeFlag(
     signals,
-    pattern(`^\\s*(?:please\\s+|пожалуйста\\s+)?(?:remind\\s+me|напомни(?:те)?(?:\\s+мне)?)${WORD_END}`),
+    pattern(
+      `^\\s*(?:please\\s+|пожалуйста\\s+)?(?:remind\\s+me|напомни(?:те)?(?:\\s+мне)?)${WORD_END}`,
+    ),
   );
   signals.commandVerb = takeFlag(signals, COMMAND_VERBS) || signals.reminderRequested;
   extractPriority(signals);
@@ -424,7 +445,9 @@ export function parseVoiceCommand(transcript: string, context: VoiceParseContext
   );
   signals.eventKeyword =
     signals.eventKeyword ||
-    pattern(`${WORD_START}(?:meeting|appointment|встреч[аиуе]|созвон)${WORD_END}`).test(signals.text);
+    pattern(`${WORD_START}(?:meeting|appointment|встреч[аиуе]|созвон)${WORD_END}`).test(
+      signals.text,
+    );
   signals.taskKeyword = takeFlag(
     signals,
     pattern(`${WORD_START}(?:(?:a|an|new)\\s+)?(?:task|задач[уаи])${WORD_END}`),
@@ -503,7 +526,10 @@ export function parseVoiceCommand(transcript: string, context: VoiceParseContext
       } else if (signals.durationMinutes !== null) {
         eventEnd = addMinutesToLocalDateTime(eventStart, signals.durationMinutes);
       } else {
-        const suggestedEnd = addMinutesToLocalDateTime(eventStart, VOICE_CONFIG.suggestedEventMinutes);
+        const suggestedEnd = addMinutesToLocalDateTime(
+          eventStart,
+          VOICE_CONFIG.suggestedEventMinutes,
+        );
         eventEnd = suggestedEnd;
         signals.ambiguities.push({ type: 'eventEndSuggested', suggestedEnd });
       }

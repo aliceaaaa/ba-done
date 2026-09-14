@@ -1,5 +1,5 @@
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import {
@@ -9,6 +9,7 @@ import {
   type FutureTask,
   type RankedTask,
 } from '@/entities/task';
+import { MicButton, useVoiceHint } from '@/features/voice';
 import { NoticeBar } from '@/shared/ui/notice-bar';
 import { TextButton } from '@/shared/ui/text-button';
 import { colors, spacing } from '@/shared/ui/theme';
@@ -27,6 +28,7 @@ export function FuturePoolScreen() {
   const [tasks, setTasks] = useState<FutureTask[] | null>(null);
   const [schedulingId, setSchedulingId] = useState<string | null>(null);
   const [notice, setNotice] = useState<ScheduledNotice | null>(null);
+  useVoiceHint({ kind: 'futureTask' });
 
   const reload = useCallback(async () => {
     setTasks(await service.getFuturePool());
@@ -37,6 +39,8 @@ export function FuturePoolScreen() {
       void reload();
     }, [reload]),
   );
+
+  useEffect(() => service.onChange(() => void reload()), [service, reload]);
 
   const handleScheduled = useCallback(
     async (task: RankedTask) => {
@@ -99,6 +103,7 @@ export function FuturePoolScreen() {
   return (
     <View style={styles.screen}>
       <View style={styles.header}>
+        <MicButton hint={{ kind: 'futureTask' }} />
         <TextButton
           label="New Future task"
           variant="primary"
@@ -129,6 +134,8 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
     justifyContent: 'flex-end',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,

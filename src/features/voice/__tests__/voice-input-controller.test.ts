@@ -52,7 +52,9 @@ describe('VoiceInputController', () => {
 
     expect(adapter.calls.request).toBe(1);
     expect(statuses).toEqual(['requestingPermission', 'listening']);
-    expect(adapter.calls.start).toEqual([{ locale: 'en-US', mode: 'manual', contextualStrings: [] }]);
+    expect(adapter.calls.start).toEqual([
+      { locale: 'en-US', mode: 'manual', contextualStrings: [] },
+    ]);
   });
 
   it('does not request again when permission is already granted', async () => {
@@ -94,7 +96,10 @@ describe('VoiceInputController', () => {
     adapter.emitPartial('add mi');
     adapter.emitPartial('add milk');
 
-    expect(controller.getState()).toMatchObject({ status: 'listening', partialTranscript: 'add milk' });
+    expect(controller.getState()).toMatchObject({
+      status: 'listening',
+      partialTranscript: 'add milk',
+    });
     expect(results).toEqual([]);
   });
 
@@ -270,11 +275,17 @@ describe('NativeSpeechRecognitionAdapter', () => {
     adapter.addListener('error', (event) => events.push(['error', event]));
     adapter.addListener('stateChanged', (event) => events.push(['state', event]));
 
-    expect(await adapter.getPermissionStatus()).toEqual({ status: 'undetermined', canAskAgain: true });
+    expect(await adapter.getPermissionStatus()).toEqual({
+      status: 'undetermined',
+      canAskAgain: true,
+    });
     expect(await adapter.requestPermissions()).toEqual({ status: 'granted', canAskAgain: true });
     native.emit('start', null);
     native.emit('result', { isFinal: false, results: [{ transcript: 'add', confidence: -1 }] });
-    native.emit('result', { isFinal: true, results: [{ transcript: 'add milk', confidence: 0.7 }] });
+    native.emit('result', {
+      isFinal: true,
+      results: [{ transcript: 'add milk', confidence: 0.7 }],
+    });
     native.emit('error', { error: 'service-not-allowed', message: 'Disabled' });
     native.emit('end', null);
 

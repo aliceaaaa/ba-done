@@ -41,7 +41,11 @@ export function ListsScreen() {
         <View style={styles.state} testID="empty-lists">
           <Text style={styles.emptyTitle}>{LISTS_TEXT.empty}</Text>
           <Text style={styles.hint}>{LISTS_TEXT.emptyHint}</Text>
-          <TextButton label={LISTS_TEXT.create} variant="primary" onPress={() => router.push('/list/new')} />
+          <TextButton
+            label={LISTS_TEXT.create}
+            variant="primary"
+            onPress={() => router.push('/list/new')}
+          />
         </View>
       );
     }
@@ -61,7 +65,11 @@ export function ListsScreen() {
           <Text accessibilityRole="header" style={styles.title}>
             {LISTS_TEXT.title}
           </Text>
-          <TextButton label={LISTS_TEXT.newList} variant="primary" onPress={() => router.push('/list/new')} />
+          <TextButton
+            label={LISTS_TEXT.newList}
+            variant="primary"
+            onPress={() => router.push('/list/new')}
+          />
         </View>
         {renderContent()}
         <TextButton label={LISTS_TEXT.archived} onPress={() => router.push('/list/archived')} />

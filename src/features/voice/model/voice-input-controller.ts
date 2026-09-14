@@ -45,12 +45,7 @@ export type VoiceSessionEnd = {
 };
 
 export type StartOutcome =
-  | 'started'
-  | 'alreadyActive'
-  | 'permissionDenied'
-  | 'unavailable'
-  | 'notForeground'
-  | 'error';
+  'started' | 'alreadyActive' | 'permissionDenied' | 'unavailable' | 'notForeground' | 'error';
 
 export type VoiceInputController = {
   getState(): VoiceInputState;
@@ -205,7 +200,10 @@ export function createVoiceInputController({
       if (current === null) {
         return;
       }
-      if (next === 'background' || (next === 'inactive' && state.status !== 'requestingPermission')) {
+      if (
+        next === 'background' ||
+        (next === 'inactive' && state.status !== 'requestingPermission')
+      ) {
         void abort('background');
       }
     }),

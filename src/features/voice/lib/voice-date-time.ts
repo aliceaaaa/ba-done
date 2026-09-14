@@ -129,17 +129,23 @@ export function extractDate(text: string, today: string): Extraction<DateExtract
         if (count === null || !Number.isInteger(count)) {
           return null;
         }
-        return { date: addDays(today, foldText(match[2] ?? '').startsWith('week') ? count * 7 : count) };
+        return {
+          date: addDays(today, foldText(match[2] ?? '').startsWith('week') ? count * 7 : count),
+        };
       },
     ],
     [
-      pattern(`${WORD_START}через\\s+(?:(${NUMBER_PATTERN})\\s+)?(день|дня|дней|неделю|недели|недель)${WORD_END}`),
+      pattern(
+        `${WORD_START}через\\s+(?:(${NUMBER_PATTERN})\\s+)?(день|дня|дней|неделю|недели|недель)${WORD_END}`,
+      ),
       (match) => {
         const count = match[1] === undefined ? 1 : parseNumber(match[1]);
         if (count === null || !Number.isInteger(count)) {
           return null;
         }
-        return { date: addDays(today, foldText(match[2] ?? '').startsWith('недел') ? count * 7 : count) };
+        return {
+          date: addDays(today, foldText(match[2] ?? '').startsWith('недел') ? count * 7 : count),
+        };
       },
     ],
     [
@@ -276,7 +282,9 @@ function rangeFrom(start: ClockParts, end: ClockParts, matched: string): TimeRan
 export function extractTimeRange(text: string): Extraction<TimeRangeExtraction> | null {
   const english = extract(
     text,
-    pattern(`${WORD_START}(?:from|between)\\s+${EN_TIME}\\s*(?:to|till|until|and|-|–)\\s*${EN_TIME}(?![\\p{L}\\p{N}])`),
+    pattern(
+      `${WORD_START}(?:from|between)\\s+${EN_TIME}\\s*(?:to|till|until|and|-|–)\\s*${EN_TIME}(?![\\p{L}\\p{N}])`,
+    ),
     (match) => {
       const start = englishParts(match[1], match[2], match[3]);
       const end = englishParts(match[4], match[5], match[6]);
@@ -312,7 +320,9 @@ export function extractTime(text: string): Extraction<TimeExtraction> | null {
       },
     ],
     [
-      pattern(`${WORD_START}(\\d{1,2})(?:[:.](\\d{2}))?\\s*(a\\.?\\s?m\\.?|p\\.?\\s?m\\.?)(?![\\p{L}\\p{N}])`),
+      pattern(
+        `${WORD_START}(\\d{1,2})(?:[:.](\\d{2}))?\\s*(a\\.?\\s?m\\.?|p\\.?\\s?m\\.?)(?![\\p{L}\\p{N}])`,
+      ),
       (match) => {
         const parts = englishParts(match[1], match[2], match[3]);
         const time = parts === null ? null : clockTime(parts);
@@ -320,7 +330,9 @@ export function extractTime(text: string): Extraction<TimeExtraction> | null {
       },
     ],
     [
-      pattern(`${WORD_START}(?:в|во|к)\\s+(\\d{1,2})(?:[:.](\\d{2}))?(?:\\s*час(?:а|ов)?)?(?:\\s+(утра|дня|вечера|ночи))?${WORD_END}`),
+      pattern(
+        `${WORD_START}(?:в|во|к)\\s+(\\d{1,2})(?:[:.](\\d{2}))?(?:\\s*час(?:а|ов)?)?(?:\\s+(утра|дня|вечера|ночи))?${WORD_END}`,
+      ),
       (match) => {
         const parts = russianParts(match[1], match[2], match[3]);
         const time = parts === null ? null : clockTime(parts);
@@ -328,7 +340,9 @@ export function extractTime(text: string): Extraction<TimeExtraction> | null {
       },
     ],
     [
-      pattern(`${WORD_START}(?:в|во|к)\\s+(${NUMBER_PATTERN})\\s*(?:час(?:а|ов)?(?:\\s+(утра|дня|вечера|ночи))?|(утра|дня|вечера|ночи))${WORD_END}`),
+      pattern(
+        `${WORD_START}(?:в|во|к)\\s+(${NUMBER_PATTERN})\\s*(?:час(?:а|ов)?(?:\\s+(утра|дня|вечера|ночи))?|(утра|дня|вечера|ночи))${WORD_END}`,
+      ),
       (match) => {
         const parts = russianParts(match[1], undefined, match[2] ?? match[3]);
         const time = parts === null ? null : clockTime(parts);

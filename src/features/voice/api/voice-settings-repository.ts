@@ -21,7 +21,9 @@ function isLanguage(value: string): value is RecognitionLanguage {
 
 export function createVoiceSettingsRepository(db: SqlExecutor): VoiceSettingsRepository {
   async function read(key: string): Promise<string | null> {
-    const row = await db.get<{ value: string }>('SELECT value FROM app_settings WHERE key = ?', [key]);
+    const row = await db.get<{ value: string }>('SELECT value FROM app_settings WHERE key = ?', [
+      key,
+    ]);
     return row?.value ?? null;
   }
 
@@ -38,7 +40,8 @@ export function createVoiceSettingsRepository(db: SqlExecutor): VoiceSettingsRep
       const [handsFree, language] = await Promise.all([read(HANDS_FREE_KEY), read(LANGUAGE_KEY)]);
       return {
         handsFreeEnabled: handsFree === 'true',
-        language: language !== null && isLanguage(language) ? language : DEFAULT_VOICE_SETTINGS.language,
+        language:
+          language !== null && isLanguage(language) ? language : DEFAULT_VOICE_SETTINGS.language,
       };
     },
 

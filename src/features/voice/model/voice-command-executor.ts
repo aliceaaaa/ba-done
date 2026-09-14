@@ -102,7 +102,9 @@ export function createVoiceCommandExecutor({
           date: error.scheduledDate,
           priority: error.priority,
           occupiedBy: error.occupiedBy,
-          freePriorities: slots.filter((slot) => slot.occupiedBy === null).map((slot) => slot.priority),
+          freePriorities: slots
+            .filter((slot) => slot.occupiedBy === null)
+            .map((slot) => slot.priority),
         },
       );
     }

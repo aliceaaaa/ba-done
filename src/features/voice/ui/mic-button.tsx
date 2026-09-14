@@ -21,7 +21,11 @@ type MicButtonProps = {
   testID?: string;
 };
 
-function MicButtonContent({ hint, testID, services }: MicButtonProps & { services: VoiceServices }) {
+function MicButtonContent({
+  hint,
+  testID,
+  services,
+}: MicButtonProps & { services: VoiceServices }) {
   const state = useVoiceInputState(services);
   const [available, setAvailable] = useState(true);
 

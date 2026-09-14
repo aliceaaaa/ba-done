@@ -4,6 +4,7 @@ import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-nat
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useCalendarEventService } from '@/entities/calendar-event';
+import { MicButton, useVoiceHint } from '@/features/voice';
 import { UI_STRINGS } from '@/shared/config/ui-strings';
 import { toLocalDate } from '@/shared/lib/local-date';
 import { ChipRow, type ChipOption } from '@/shared/ui/chip-row';
@@ -62,6 +63,7 @@ export function CalendarScreen({ initialDate = null }: CalendarScreenProps) {
   const range = useMemo(() => periodRange(date, mode), [date, mode]);
   const { data, retry } = useCalendarData(range);
   const timeZone = events.getTimeZone();
+  useVoiceHint({ kind: 'calendar', date });
 
   const counts = useMemo(
     () => (data.status === 'ready' ? countByDate(data.tasks, data.events, timeZone) : new Map()),
@@ -188,11 +190,14 @@ export function CalendarScreen({ initialDate = null }: CalendarScreenProps) {
           <Text accessibilityRole="header" style={styles.title}>
             {CALENDAR_TEXT.title}
           </Text>
-          <TextButton
-            label={CALENDAR_TEXT.create}
-            variant="primary"
-            onPress={() => setCreating((current) => !current)}
-          />
+          <View style={styles.headerActions}>
+            <MicButton hint={{ kind: 'calendar', date }} testID="calendar-mic-button" />
+            <TextButton
+              label={CALENDAR_TEXT.create}
+              variant="primary"
+              onPress={() => setCreating((current) => !current)}
+            />
+          </View>
         </View>
         {creating ? (
           <View style={styles.createMenu} testID="create-menu">
@@ -210,6 +215,7 @@ export function CalendarScreen({ initialDate = null }: CalendarScreenProps) {
                 router.push({ pathname: '/event/new', params: { date } });
               }}
             />
+            <MicButton hint={{ kind: 'calendar', date }} testID="create-menu-mic-button" />
             <TextButton label={CALENDAR_TEXT.cancel} onPress={() => setCreating(false)} />
           </View>
         ) : null}
@@ -256,6 +262,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
     gap: spacing.sm,
   },
   title: {

@@ -155,9 +155,7 @@ describe('ListService', () => {
       unwrap(await service.deleteList(list.id));
 
       expect(titles(await service.getLists())).toEqual(['Groceries']);
-      expect(unwrapError(await service.deleteList(groceries.id)).type).toBe(
-        'ShoppingListRequired',
-      );
+      expect(unwrapError(await service.deleteList(groceries.id)).type).toBe('ShoppingListRequired');
     });
 
     it('soft deletes a list and hides it everywhere', async () => {
@@ -171,9 +169,9 @@ describe('ListService', () => {
       expect(titles(await service.getLists())).toEqual(['Shopping']);
       expect(await service.getArchivedLists()).toEqual([]);
       expect(unwrapError(await service.getList(list.id)).type).toBe('ListNotFound');
-      expect(await db.get('SELECT deleted_at IS NOT NULL AS deleted FROM lists WHERE id = ?', [
-        list.id,
-      ])).toEqual({ deleted: 1 });
+      expect(
+        await db.get('SELECT deleted_at IS NOT NULL AS deleted FROM lists WHERE id = ?', [list.id]),
+      ).toEqual({ deleted: 1 });
     });
   });
 

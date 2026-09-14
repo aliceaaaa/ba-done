@@ -1,5 +1,5 @@
-import { ScreenTitle } from '@/shared/ui/screen-title';
+import { ListsScreen } from '@/features/lists';
 
-export default function ListsScreen() {
-  return <ScreenTitle title="Lists" />;
+export default function ListsRoute() {
+  return <ListsScreen />;
 }

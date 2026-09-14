@@ -12,6 +12,8 @@ import type { VoiceCommandExecutor, VoiceDestination, VoiceUndo } from './voice-
 import { parseVoiceCommand } from './voice-command-parser';
 import { saveInputFromDraft } from './voice-save-input';
 
+export const VOICE_UNDO_FAILED = 'Could not undo';
+
 export type PendingVoiceCommand = {
   commandId: string;
   draft: VoiceCommandDraft;
@@ -122,7 +124,11 @@ export function createVoiceCommandSession({
       if (canExecuteImmediately(draft) && input !== null) {
         const result = await executor.execute(commandId, input);
         if (result.ok) {
-          showNotice({ message: result.message, undo: result.undo, destination: result.destination });
+          showNotice({
+            message: result.message,
+            undo: result.undo,
+            destination: result.destination,
+          });
           return 'executed';
         }
         setState({ pending: { commandId, draft, hint, error: result.message } });
@@ -144,13 +150,15 @@ export function createVoiceCommandSession({
 
     async undoNotice() {
       const { notice } = state;
-      if (notice?.undo === null || notice === null) {
+      if (notice === null || notice.undo === null) {
         return false;
       }
       const undone = await executor.undo(notice.undo);
-      setState({
-        notice: undone ? null : { ...notice, id: notice.id + 1, message: 'Could not undo', undo: null },
-      });
+      if (undone) {
+        setState({ notice: null });
+      } else {
+        showNotice({ message: VOICE_UNDO_FAILED, undo: null, destination: notice.destination });
+      }
       return undone;
     },
 

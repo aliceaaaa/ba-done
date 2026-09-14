@@ -19,7 +19,11 @@ export function ArchivedListsScreen() {
   const { state, retry } = useLists(true);
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content} testID="archived-lists">
+    <ScrollView
+      style={styles.screen}
+      contentContainerStyle={styles.content}
+      testID="archived-lists"
+    >
       {state.status === 'loading' ? (
         <ActivityIndicator accessibilityLabel={ARCHIVED_LISTS_TEXT.loading} color={colors.accent} />
       ) : null}
@@ -34,7 +38,11 @@ export function ArchivedListsScreen() {
       ) : null}
       {state.status === 'ready'
         ? state.value.map((list) => (
-            <ListRow key={list.id} list={list} onPress={(item) => router.push(`/list/${item.id}`)} />
+            <ListRow
+              key={list.id}
+              list={list}
+              onPress={(item) => router.push(`/list/${item.id}`)}
+            />
           ))
         : null}
     </ScrollView>

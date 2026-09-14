@@ -110,7 +110,10 @@ export function createHandsFreeController({
 
   function ownsSession(): boolean {
     const current = controller.getState();
-    return current.mode === 'handsFree' && ['requestingPermission', 'listening', 'processing'].includes(current.status);
+    return (
+      current.mode === 'handsFree' &&
+      ['requestingPermission', 'listening', 'processing'].includes(current.status)
+    );
   }
 
   async function pause(reason: HandsFreePauseReason) {
@@ -289,7 +292,10 @@ export function createHandsFreeController({
     },
 
     commandHandled() {
-      if (state.status === 'handlingCommand' || (state.status === 'paused' && state.pauseReason === 'manualInput')) {
+      if (
+        state.status === 'handlingCommand' ||
+        (state.status === 'paused' && state.pauseReason === 'manualInput')
+      ) {
         if (appState.currentState() === 'active') {
           void listen();
         } else {

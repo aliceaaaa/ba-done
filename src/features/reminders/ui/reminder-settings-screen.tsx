@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -14,7 +14,11 @@ import { useReminders } from '../model/reminder-context';
 export const EXACT_ALARM_NOTE =
   'Android may deliver reminders a few minutes late to save battery unless the app is allowed to use exact alarms.';
 
-export function ReminderSettingsScreen() {
+type ReminderSettingsScreenProps = {
+  extraSections?: ReactNode;
+};
+
+export function ReminderSettingsScreen({ extraSections = null }: ReminderSettingsScreenProps) {
   const coordinator = useReminders();
   const [times, setTimes] = useState<DayPeriodTimes | null>(null);
   const [permission, setPermission] = useState<NotificationPermission | null>(null);
@@ -97,6 +101,7 @@ export function ReminderSettingsScreen() {
             <Text style={styles.hint}>{EXACT_ALARM_NOTE}</Text>
           ) : null}
         </View>
+        {extraSections}
       </ScrollView>
     </SafeAreaView>
   );

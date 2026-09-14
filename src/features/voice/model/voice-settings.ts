@@ -78,7 +78,10 @@ export function createVoiceSettingsStore(repository: {
   };
 }
 
-export function resolveRecognitionLocale(language: RecognitionLanguage, deviceLocale: string): string {
+export function resolveRecognitionLocale(
+  language: RecognitionLanguage,
+  deviceLocale: string,
+): string {
   return language === 'system' ? deviceLocale : language;
 }
 

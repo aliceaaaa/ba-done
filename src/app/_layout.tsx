@@ -2,7 +2,7 @@ import { randomUUID } from 'expo-crypto';
 import { Stack } from 'expo-router';
 import { SQLiteProvider, useSQLiteContext, type SQLiteDatabase } from 'expo-sqlite';
 import { StatusBar } from 'expo-status-bar';
-import { useMemo, type ReactNode } from 'react';
+import { useEffect, useMemo, type ReactNode } from 'react';
 import { StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
@@ -12,6 +12,7 @@ import {
   CalendarEventServiceProvider,
   createCalendarEventService,
 } from '@/entities/calendar-event';
+import { ListServiceProvider, createListService } from '@/entities/list';
 import { createAppSettingsRepository } from '@/entities/reminder';
 import { createTaskService, TaskServiceProvider } from '@/entities/task';
 import {
@@ -24,6 +25,19 @@ import {
   createSyncedTaskService,
 } from '@/features/reminders';
 import { createExpoNotificationAdapter } from '@/features/reminders/api/expo-notification-adapter';
+import {
+  VoiceHost,
+  VoiceProvider,
+  createVoiceServices,
+  createVoiceSettingsRepository,
+} from '@/features/voice';
+import {
+  createReactNativeAppState,
+  getDeviceLocale,
+  openAppSettings,
+  systemScheduler,
+} from '@/features/voice/api/device-voice-environment';
+import { createNativeSpeechRecognitionAdapter } from '@/features/voice/api/native-speech-recognition-adapter';
 import { getDeviceTimeZone } from '@/shared/lib/device-time-zone';
 
 function initializeDatabase(db: SQLiteDatabase): Promise<void> {
@@ -61,21 +75,42 @@ function AppServicesRoot({ children }: { children: ReactNode }) {
     const service = createSyncedTaskService(taskService, coordinator);
     const events = createSyncedCalendarEventService(eventService, coordinator);
     const handler = createNotificationResponseHandler({ db, service, events, now });
-    return { adapter, coordinator, service, events, handler };
+    const lists = createListService({ db, now, generateId: randomUUID });
+    const voice = createVoiceServices({
+      adapter: createNativeSpeechRecognitionAdapter(),
+      appState: createReactNativeAppState(),
+      scheduler: systemScheduler,
+      tasks: service,
+      events,
+      lists,
+      settingsRepository: createVoiceSettingsRepository(db),
+      now,
+      timeZone: getDeviceTimeZone,
+      deviceLocale: getDeviceLocale,
+      openSettings: openAppSettings,
+    });
+    return { adapter, coordinator, service, events, handler, lists, voice };
   }, [sqlite]);
+
+  useEffect(() => () => services.voice.dispose(), [services]);
 
   return (
     <TaskServiceProvider service={services.service}>
       <CalendarEventServiceProvider service={services.events}>
-        <ReminderProvider coordinator={services.coordinator}>
-          {children}
-          <ReminderLifecycle
-            adapter={services.adapter}
-            coordinator={services.coordinator}
-            handler={services.handler}
-          />
-          <ReminderNoticeHost coordinator={services.coordinator} />
-        </ReminderProvider>
+        <ListServiceProvider service={services.lists}>
+          <VoiceProvider services={services.voice}>
+            <ReminderProvider coordinator={services.coordinator}>
+              {children}
+              <ReminderLifecycle
+                adapter={services.adapter}
+                coordinator={services.coordinator}
+                handler={services.handler}
+              />
+              <ReminderNoticeHost coordinator={services.coordinator} />
+              <VoiceHost />
+            </ReminderProvider>
+          </VoiceProvider>
+        </ListServiceProvider>
       </CalendarEventServiceProvider>
     </TaskServiceProvider>
   );
@@ -88,6 +123,10 @@ export default function RootLayout() {
         <AppServicesRoot>
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="(tabs)" />
+            <Stack.Screen
+              name="voice-command"
+              options={{ presentation: 'modal', headerShown: true }}
+            />
           </Stack>
         </AppServicesRoot>
         <StatusBar style="auto" />

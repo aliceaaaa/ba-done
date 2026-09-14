@@ -106,7 +106,10 @@ function VoiceSettingsContent({ services }: { services: VoiceServices }) {
         </Text>
       )}
       {permission?.status === 'denied' && available !== false ? (
-        <TextButton label={VOICE_SETTINGS_TEXT.openSettings} onPress={() => void services.openSettings()} />
+        <TextButton
+          label={VOICE_SETTINGS_TEXT.openSettings}
+          onPress={() => void services.openSettings()}
+        />
       ) : null}
 
       <View style={styles.switchRow}>

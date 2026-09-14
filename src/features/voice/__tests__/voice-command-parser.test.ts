@@ -356,7 +356,9 @@ describe('parseVoiceCommand', () => {
     });
 
     it('uses the selected day of Your matches for a task without a date', () => {
-      expect(parse('Buy flowers', withHint({ kind: 'rankedTask', date: '2026-09-20' }))).toMatchObject({
+      expect(
+        parse('Buy flowers', withHint({ kind: 'rankedTask', date: '2026-09-20' })),
+      ).toMatchObject({
         kind: 'rankedTask',
         date: '2026-09-20',
         missingFields: ['priority'],
@@ -375,9 +377,9 @@ describe('parseVoiceCommand', () => {
     it('uses the injected time zone instead of the process time zone', () => {
       const lateEvening = new Date('2026-09-11T23:30:00.000Z');
 
-      expect(parse('Today call mom priority 1', { now: lateEvening, timeZone: 'Asia/Tokyo' }).date).toBe(
-        '2026-09-12',
-      );
+      expect(
+        parse('Today call mom priority 1', { now: lateEvening, timeZone: 'Asia/Tokyo' }).date,
+      ).toBe('2026-09-12');
       expect(
         parse('Today call mom priority 1', { now: lateEvening, timeZone: 'America/Los_Angeles' })
           .date,
@@ -385,9 +387,10 @@ describe('parseVoiceCommand', () => {
     });
 
     it('uses the preferred recognition language only when the text does not reveal it', () => {
-      expect(parse('12:30', { preferredLanguage: 'ru', hint: { kind: 'calendar', date: TODAY } }).language).toBe(
-        'ru',
-      );
+      expect(
+        parse('12:30', { preferredLanguage: 'ru', hint: { kind: 'calendar', date: TODAY } })
+          .language,
+      ).toBe('ru');
       expect(parse('Add milk to Shopping', { preferredLanguage: 'ru' }).language).toBe('en');
     });
   });

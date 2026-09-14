@@ -6,17 +6,24 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import CalendarRoute from '@/app/(tabs)/calendar';
 import TodayRoute from '@/app/(tabs)/index';
+import ListsRoute from '@/app/(tabs)/lists';
 import SettingsRoute from '@/app/(tabs)/settings';
 import EditEventRoute from '@/app/event/[id]/edit';
 import EventDetailsRoute from '@/app/event/[id]/index';
 import EventRemindLaterRoute from '@/app/event/[id]/remind-later';
 import NewEventRoute from '@/app/event/new';
 import FutureRoute from '@/app/future';
+import EditListItemRoute from '@/app/list-item/[id]';
+import EditListRoute from '@/app/list/[id]/edit';
+import ListRoute from '@/app/list/[id]/index';
+import ArchivedListsRoute from '@/app/list/archived';
+import NewListRoute from '@/app/list/new';
 import EditTaskRoute from '@/app/task/[id]/edit';
 import TaskDetailsRoute from '@/app/task/[id]/index';
 import ChangePriorityRoute from '@/app/task/[id]/priority';
 import RemindLaterRoute from '@/app/task/[id]/remind-later';
 import NewTaskRoute from '@/app/task/new';
+import VoiceCommandRoute from '@/app/voice-command';
 import { migrateDatabase } from '@/database/migrations';
 import type { SqlDatabase } from '@/database/sql-database';
 import {
@@ -29,7 +36,12 @@ import {
   type CalendarEventService,
   type EventResult,
 } from '@/entities/calendar-event';
-import { createListService, type ListResult, type ListService } from '@/entities/list';
+import {
+  ListServiceProvider,
+  createListService,
+  type ListResult,
+  type ListService,
+} from '@/entities/list';
 import { createAppSettingsRepository } from '@/entities/reminder';
 import {
   createTaskService,
@@ -53,6 +65,24 @@ import {
   createFakeNotificationAdapter,
   type FakeNotificationAdapter,
 } from '@/features/reminders/testing/fake-notification-adapter';
+import {
+  VoiceHost,
+  VoiceProvider,
+  createVoiceServices,
+  createVoiceSettingsRepository,
+  type VoiceServices,
+} from '@/features/voice';
+import {
+  createFakeAppState,
+  createManualScheduler,
+  type FakeAppState,
+  type ManualScheduler,
+} from '@/features/voice/testing/fake-app-state';
+import {
+  createFakeSpeechRecognitionAdapter,
+  type FakeSpeechOptions,
+  type FakeSpeechRecognitionAdapter,
+} from '@/features/voice/testing/fake-speech-recognition-adapter';
 
 export const TEST_TIME_ZONE = 'Europe/Berlin';
 export const TEST_START = '2026-09-11T08:00:00.000Z';
@@ -199,13 +229,57 @@ export function unwrap<T>(result: TaskResult<T> | EventResult<T> | ListResult<T>
   return result.value;
 }
 
+export type TestVoice = {
+  services: VoiceServices;
+  adapter: FakeSpeechRecognitionAdapter;
+  appState: FakeAppState;
+  scheduler: ManualScheduler;
+  openSettings: jest.Mock<Promise<void>, []>;
+};
+
+type TestVoiceOptions = FakeSpeechOptions & {
+  tasks: TaskService;
+  events: CalendarEventService;
+  lists: ListService;
+  deviceLocale?: string;
+  start?: string;
+};
+
+export function createTestVoice(db: SqlDatabase, options: TestVoiceOptions): TestVoice {
+  const adapter = createFakeSpeechRecognitionAdapter(options);
+  const appState = createFakeAppState();
+  const scheduler = createManualScheduler();
+  const openSettings = jest.fn(async () => undefined);
+  const services = createVoiceServices({
+    adapter,
+    appState,
+    scheduler,
+    tasks: options.tasks,
+    events: options.events,
+    lists: options.lists,
+    settingsRepository: createVoiceSettingsRepository(db),
+    now: createTestClock(options.start),
+    timeZone: () => TEST_TIME_ZONE,
+    deviceLocale: () => options.deviceLocale ?? 'en-US',
+    openSettings,
+  });
+  return { services, adapter, appState, scheduler, openSettings };
+}
+
+type RenderAppOptions = {
+  lists?: ListService;
+  voice?: TestVoice;
+};
+
 export function renderApp(
   service: TaskService,
   initialUrl = '/',
   reminders?: TestReminders,
   eventService?: CalendarEventService,
+  options: RenderAppOptions = {},
 ) {
   const events = reminders?.events ?? eventService;
+  const { lists, voice } = options;
 
   function withEvents(children: ReactNode) {
     return events === undefined ? (
@@ -215,8 +289,25 @@ export function renderApp(
     );
   }
 
+  function withListsAndVoice(children: ReactNode) {
+    const withVoice =
+      voice === undefined ? (
+        children
+      ) : (
+        <VoiceProvider services={voice.services}>
+          {children}
+          <VoiceHost />
+        </VoiceProvider>
+      );
+    return lists === undefined ? (
+      withVoice
+    ) : (
+      <ListServiceProvider service={lists}>{withVoice}</ListServiceProvider>
+    );
+  }
+
   function TestLayout() {
-    const stack = <Stack screenOptions={{ headerShown: false }} />;
+    const stack = withListsAndVoice(<Stack screenOptions={{ headerShown: false }} />);
     return (
       <GestureHandlerRootView style={styles.root}>
         <TaskServiceProvider service={service}>
@@ -256,6 +347,13 @@ export function renderApp(
       'event/[id]/index': EventDetailsRoute,
       'event/[id]/edit': EditEventRoute,
       'event/[id]/remind-later': EventRemindLaterRoute,
+      lists: ListsRoute,
+      'list/new': NewListRoute,
+      'list/archived': ArchivedListsRoute,
+      'list/[id]/index': ListRoute,
+      'list/[id]/edit': EditListRoute,
+      'list-item/[id]': EditListItemRoute,
+      'voice-command': VoiceCommandRoute,
     },
     { initialUrl },
   );

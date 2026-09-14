@@ -48,7 +48,11 @@ export function ListItemRow({
       </Pressable>
       {readOnly ? null : (
         <View style={styles.actions}>
-          <TextButton label="Edit" accessibilityLabel={`Edit ${item.title}`} onPress={() => onEdit(item)} />
+          <TextButton
+            label="Edit"
+            accessibilityLabel={`Edit ${item.title}`}
+            onPress={() => onEdit(item)}
+          />
           <TextButton
             label="Delete"
             accessibilityLabel={`Delete ${item.title}`}

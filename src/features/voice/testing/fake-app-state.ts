@@ -55,7 +55,9 @@ export function createManualScheduler(): ManualScheduler {
       }
       tasks.delete(entry[0]);
       entry[1].callback();
-      await new Promise((resolve) => setImmediate(resolve));
+      for (let tick = 0; tick < 20; tick++) {
+        await Promise.resolve();
+      }
     },
   };
 }

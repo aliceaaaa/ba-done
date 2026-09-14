@@ -21,7 +21,10 @@ import {
   type VoiceCommandExecutor,
 } from '../model/voice-command-executor';
 import type { VoiceCommandHint } from '../model/voice-command';
-import { createVoiceCommandSession, type VoiceCommandSession } from '../model/voice-command-session';
+import {
+  createVoiceCommandSession,
+  type VoiceCommandSession,
+} from '../model/voice-command-session';
 
 function brokenDatabase(db: SqlDatabase): SqlDatabase {
   return {
@@ -41,13 +44,21 @@ describe('Voice command execution', () => {
   let session: VoiceCommandSession;
   let sessionId: number;
 
-  function createSession(services: { tasks: TaskService; events: CalendarEventService; lists: ListService }) {
+  function createSession(services: {
+    tasks: TaskService;
+    events: CalendarEventService;
+    lists: ListService;
+  }) {
     executor = createVoiceCommandExecutor(services);
     const now = createTestClock();
     return createVoiceCommandSession({
       executor,
       loadLists: async () =>
-        (await lists.getLists()).map((list) => ({ id: list.id, title: list.title, kind: list.kind })),
+        (await lists.getLists()).map((list) => ({
+          id: list.id,
+          title: list.title,
+          kind: list.kind,
+        })),
       now,
       timeZone: () => TEST_TIME_ZONE,
       preferredLanguage: () => 'en',
@@ -153,7 +164,9 @@ describe('Voice command execution', () => {
   });
 
   it('shows the occupied priority and the free positions on a conflict', async () => {
-    const busy = unwrap(await tasks.createTask({ title: 'Busy', scheduledDate: TOMORROW, priority: 7 }));
+    const busy = unwrap(
+      await tasks.createTask({ title: 'Busy', scheduledDate: TOMORROW, priority: 7 }),
+    );
     unwrap(await tasks.createTask({ title: 'Other', scheduledDate: TOMORROW, priority: 3 }));
 
     const result = await executor.execute('voice-conflict', {
@@ -253,9 +266,9 @@ describe('Voice command execution', () => {
   });
 
   it('suggests an event end but never saves the event automatically', async () => {
-    expect(await say('Create an event dentist tomorrow at 9 am', { kind: 'calendar', date: TODAY })).toBe(
-      'preview',
-    );
+    expect(
+      await say('Create an event dentist tomorrow at 9 am', { kind: 'calendar', date: TODAY }),
+    ).toBe('preview');
 
     expect(session.getState().pending?.draft).toMatchObject({
       eventEnd: `${TOMORROW}T10:00`,

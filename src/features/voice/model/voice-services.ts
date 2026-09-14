@@ -3,7 +3,11 @@ import type { ListService } from '@/entities/list';
 import type { TaskService } from '@/entities/task';
 import { VOICE_CONFIG } from '@/shared/config/voice-config';
 
-import { createHandsFreeController, type HandsFreeController, type Scheduler } from './hands-free-controller';
+import {
+  createHandsFreeController,
+  type HandsFreeController,
+  type Scheduler,
+} from './hands-free-controller';
 import type { SpeechRecognitionAdapter } from './speech-recognition-adapter';
 import type { VoiceCommandHint } from './voice-command';
 import { createVoiceCommandExecutor, type VoiceCommandExecutor } from './voice-command-executor';
@@ -45,7 +49,10 @@ export type VoiceServicesDeps = {
   tasks: TaskService;
   events: CalendarEventService;
   lists: ListService;
-  settingsRepository: { load(): Promise<VoiceSettings>; save(settings: VoiceSettings): Promise<void> };
+  settingsRepository: {
+    load(): Promise<VoiceSettings>;
+    save(settings: VoiceSettings): Promise<void>;
+  };
   now: () => Date;
   timeZone: () => string;
   deviceLocale: () => string;
@@ -69,7 +76,11 @@ export function createVoiceServices(deps: VoiceServicesDeps): VoiceServices {
   const session = createVoiceCommandSession({
     executor,
     loadLists: async () =>
-      (await deps.lists.getLists()).map((list) => ({ id: list.id, title: list.title, kind: list.kind })),
+      (await deps.lists.getLists()).map((list) => ({
+        id: list.id,
+        title: list.title,
+        kind: list.kind,
+      })),
     now: deps.now,
     timeZone: deps.timeZone,
     preferredLanguage: () => voiceLanguageForLocale(getLocale()),
@@ -98,7 +109,8 @@ export function createVoiceServices(deps: VoiceServicesDeps): VoiceServices {
     appState: deps.appState,
     scheduler: deps.scheduler,
     config: VOICE_CONFIG.handsFree,
-    hasWakePhrase: (transcript) => stripWakePhrase(transcript, VOICE_CONFIG.wakePhrases).hadWakePhrase,
+    hasWakePhrase: (transcript) =>
+      stripWakePhrase(transcript, VOICE_CONFIG.wakePhrases).hadWakePhrase,
     onCommand: (result) => {
       void session
         .handleTranscript({ ...result, hint: focusedHint })

@@ -3,7 +3,7 @@ import { useEffect, useRef } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { HANDS_FREE_TOGGLE_LABEL, VOICE_CONFIG } from '@/shared/config/voice-config';
+import { VOICE_CONFIG } from '@/shared/config/voice-config';
 import { TextButton } from '@/shared/ui/text-button';
 import { colors, spacing } from '@/shared/ui/theme';
 
@@ -72,26 +72,41 @@ function HandsFreeIndicator() {
   switch (state.status) {
     case 'awaitingConfirmation':
       message = VOICE_HOST_TEXT.handsFreeReady;
-      action = { label: VOICE_HOST_TEXT.handsFreeStart, onPress: () => void services.handsFree.start() };
+      action = {
+        label: VOICE_HOST_TEXT.handsFreeStart,
+        onPress: () => void services.handsFree.start(),
+      };
       break;
     case 'paused':
       message = PAUSE_TEXT[state.pauseReason ?? 'user'];
       action =
         state.pauseReason === 'permissionDenied'
           ? { label: VOICE_HOST_TEXT.openSettings, onPress: () => void services.openSettings() }
-          : { label: VOICE_HOST_TEXT.handsFreeResume, onPress: () => void services.handsFree.start() };
+          : {
+              label: VOICE_HOST_TEXT.handsFreeResume,
+              onPress: () => void services.handsFree.start(),
+            };
       break;
     case 'handlingCommand':
       message = VOICE_HOST_TEXT.handsFreeCommand;
-      action = { label: VOICE_HOST_TEXT.handsFreeStop, onPress: () => void services.handsFree.pause() };
+      action = {
+        label: VOICE_HOST_TEXT.handsFreeStop,
+        onPress: () => void services.handsFree.pause(),
+      };
       break;
     case 'retrying':
       message = VOICE_HOST_TEXT.handsFreeRetrying;
-      action = { label: VOICE_HOST_TEXT.handsFreeStop, onPress: () => void services.handsFree.pause() };
+      action = {
+        label: VOICE_HOST_TEXT.handsFreeStop,
+        onPress: () => void services.handsFree.pause(),
+      };
       break;
     default:
       message = VOICE_HOST_TEXT.handsFreeListening;
-      action = { label: VOICE_HOST_TEXT.handsFreeStop, onPress: () => void services.handsFree.pause() };
+      action = {
+        label: VOICE_HOST_TEXT.handsFreeStop,
+        onPress: () => void services.handsFree.pause(),
+      };
   }
   const active = state.status === 'starting' || state.status === 'waitingForWakePhrase';
 
@@ -99,7 +114,6 @@ function HandsFreeIndicator() {
     <SafeAreaView edges={['top']} style={styles.indicatorArea} pointerEvents="box-none">
       <View
         style={[styles.indicator, active && styles.indicatorActive]}
-        accessibilityLabel={HANDS_FREE_TOGGLE_LABEL}
         accessibilityLiveRegion="polite"
         testID="hands-free-indicator"
       >
@@ -144,7 +158,10 @@ function ListeningPanel() {
               onPress={() => void services.controller.stop()}
             />
           ) : null}
-          <TextButton label={VOICE_HOST_TEXT.cancel} onPress={() => void services.controller.cancel()} />
+          <TextButton
+            label={VOICE_HOST_TEXT.cancel}
+            onPress={() => void services.controller.cancel()}
+          />
         </View>
       </View>
     );
@@ -203,7 +220,10 @@ function CommandNotice() {
       <Text style={styles.noticeText}>{notice.message}</Text>
       <View style={styles.actions}>
         {notice.undo === null ? null : (
-          <TextButton label={VOICE_HOST_TEXT.undo} onPress={() => void services.session.undoNotice()} />
+          <TextButton
+            label={VOICE_HOST_TEXT.undo}
+            onPress={() => void services.session.undoNotice()}
+          />
         )}
         {destination === null ? null : (
           <TextButton

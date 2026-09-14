@@ -110,7 +110,10 @@ export function createNativeSpeechRecognitionAdapter(
       emitter.emit('error', { code: 'noSpeech', message: 'No speech was recognized' }),
     );
     module.addListener('error', (event) =>
-      emitter.emit('error', { code: ERROR_CODES[event.error] ?? 'unknown', message: event.message }),
+      emitter.emit('error', {
+        code: ERROR_CODES[event.error] ?? 'unknown',
+        message: event.message,
+      }),
     );
   }
 
