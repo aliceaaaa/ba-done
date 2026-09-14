@@ -172,9 +172,9 @@ All required strings live in `src/shared/config/ui-strings.ts` and must be used 
 
 Lists are separate from tasks: a list item never has a priority, date, reminder or placement, and changing it never creates a task.
 
-| Entity     | Fields                                                                                                   |
-| ---------- | -------------------------------------------------------------------------------------------------------- |
-| `List`     | `id`, `title`, `kind` (`shopping` \| `custom`), `color`, `icon`, `createdAt`, `updatedAt`, `archivedAt`, `deletedAt` |
+| Entity     | Fields                                                                                                                         |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `List`     | `id`, `title`, `kind` (`shopping` \| `custom`), `color`, `icon`, `createdAt`, `updatedAt`, `archivedAt`, `deletedAt`           |
 | `ListItem` | `id`, `listId`, `title`, `quantity`, `unit`, `note`, `checked`, `position`, `createdAt`, `updatedAt`, `checkedAt`, `deletedAt` |
 
 Rules (`ListService`, `src/entities/list`):
@@ -194,18 +194,18 @@ Voice input adds list items, Future tasks, ranked tasks and calendar events. It 
 
 ### Architecture
 
-| Piece                          | Location                                                         | Responsibility                                                                                                     |
-| ------------------------------ | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `SpeechRecognitionAdapter`     | `src/features/voice/model/speech-recognition-adapter.ts`         | The only boundary to the OS recognizer: availability, permissions, start/stop/cancel, partial/final/error/state events. |
-| Native adapter                 | `src/features/voice/api/native-speech-recognition-adapter.ts`    | Wraps `expo-speech-recognition`; loads the native module optionally, so a build without it reports “unavailable”. Always starts with `recordingOptions.persist: false`. |
-| Fake adapter                   | `src/features/voice/testing/fake-speech-recognition-adapter.ts`  | Test double.                                                                                                       |
-| `VoiceInputController`         | `src/features/voice/model/voice-input-controller.ts`             | One session at a time; states `idle`, `requestingPermission`, `listening`, `processing`, `result`, `cancelled`, `permissionDenied`, `unavailable`, `error`; stops on background; delivers one final result per session. |
-| `parseVoiceCommand`            | `src/features/voice/model/voice-command-parser.ts`               | Pure text → `VoiceCommandDraft`. English and Russian. No SQLite, no UI; `now`, time zone, lists and hints are passed in. |
-| `VoiceCommandExecutor`         | `src/features/voice/model/voice-command-executor.ts`             | Saves only through `TaskService`, `CalendarEventService`, `ListService`; deduplicates by command id; Undo.          |
-| `HandsFreeController`          | `src/features/voice/model/hands-free-controller.ts`              | Foreground-only wake phrase loop with limited retries and backoff.                                                 |
-| Voice Command Preview          | `/voice-command`                                                 | Editable draft with warnings, missing fields, Cancel and Save.                                                     |
+| Piece                      | Location                                                        | Responsibility                                                                                                                                                                                                          |
+| -------------------------- | --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SpeechRecognitionAdapter` | `src/features/voice/model/speech-recognition-adapter.ts`        | The only boundary to the OS recognizer: availability, permissions, start/stop/cancel, partial/final/error/state events.                                                                                                 |
+| Native adapter             | `src/features/voice/api/native-speech-recognition-adapter.ts`   | Wraps `expo-speech-recognition`; loads the native module optionally, so a build without it reports “unavailable”. Always starts with `recordingOptions.persist: false`.                                                 |
+| Fake adapter               | `src/features/voice/testing/fake-speech-recognition-adapter.ts` | Test double.                                                                                                                                                                                                            |
+| `VoiceInputController`     | `src/features/voice/model/voice-input-controller.ts`            | One session at a time; states `idle`, `requestingPermission`, `listening`, `processing`, `result`, `cancelled`, `permissionDenied`, `unavailable`, `error`; stops on background; delivers one final result per session. |
+| `parseVoiceCommand`        | `src/features/voice/model/voice-command-parser.ts`              | Pure text → `VoiceCommandDraft`. English and Russian. No SQLite, no UI; `now`, time zone, lists and hints are passed in.                                                                                                |
+| `VoiceCommandExecutor`     | `src/features/voice/model/voice-command-executor.ts`            | Saves only through `TaskService`, `CalendarEventService`, `ListService`; deduplicates by command id; Undo.                                                                                                              |
+| `HandsFreeController`      | `src/features/voice/model/hands-free-controller.ts`             | Foreground-only wake phrase loop with limited retries and backoff.                                                                                                                                                      |
+| Voice Command Preview      | `/voice-command`                                                | Editable draft with warnings, missing fields, Cancel and Save.                                                                                                                                                          |
 
-The wake phrases live in `src/shared/config/voice-config.ts` (`Hey app`, `Эй приложение`) and can be replaced by the app name later. The parser removes an optional wake phrase after a manual tap and requires it in hands-free mode.
+The wake phrases live in `src/shared/config/voice-config.ts` (`Hey app` and its Russian equivalent) and can be replaced by the app name later. The parser removes an optional wake phrase after a manual tap and requires it in hands-free mode.
 
 ### Safety rules
 
